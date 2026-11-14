@@ -57,6 +57,7 @@ func (t *Bot) taskJobs(workers *river.Workers) ([]*river.PeriodicJob, error) {
 
 func (t *Bot) workTasksTick(ctx context.Context, _ *river.Job[tasksTickArgs]) error {
 	now := time.Now().In(t.tz)
+	t.checkSyncStale(ctx, now)
 	// Overdue steps wait for the morning too.
 	if inQuietHours(now) {
 		return nil
@@ -111,7 +112,13 @@ func (t *Bot) sendMaterialStep(ctx context.Context, task storage.Task, step int)
 	}
 	t.log.Info("material step", "task", task.ID, "title", task.Title, "type", task.Type,
 		"publish_at", task.PublishAt.In(t.tz).Format(time.DateTime), "step", step, "of", materialLastStep)
-	t.sendAboutTask(ctx, chats, task, storage.TaskMsgMaterial, text, nil)
+	if !t.sendAboutTask(ctx, chats, task, storage.TaskMsgMaterial, text, nil) {
+		// Nothing went: give the step back, the next tick tries again.
+		if err := t.store.ReleaseMaterial(ctx, task.ID, step-1, task.MaterialStepAt); err != nil {
+			return err
+		}
+		t.log.Warn("material step not delivered, will retry", "task", task.ID, "step", step)
+	}
 	return nil
 }
 
@@ -182,7 +189,18 @@ func (t *Bot) sendPublishStep(ctx context.Context, task storage.Task, act publis
 	}
 	t.log.Info("publish "+step, "task", task.ID, "title", task.Title, "type", task.Type,
 		"publish_at", p.Format(time.DateTime), "n", n)
-	t.sendAboutTask(ctx, chats, task, storage.TaskMsgPublish, text, markup)
+	if !t.sendAboutTask(ctx, chats, task, storage.TaskMsgPublish, text, markup) {
+		// Nothing went: give the step back, the next tick tries again.
+		if act == publishAsk {
+			err = t.store.ReleasePublishAttempt(ctx, task.ID, task.Attempts, task.AskedAt)
+		} else {
+			err = t.store.ReleaseReminders(ctx, task.ID, task.RemindersSent, n)
+		}
+		if err != nil {
+			return err
+		}
+		t.log.Warn("publish step not delivered, will retry", "task", task.ID, "step", step, "n", n)
+	}
 	return nil
 }
 
@@ -219,18 +237,22 @@ func (t *Bot) forgetOldSkips(now time.Time) {
 }
 
 // sendAboutTask posts a message about the task to the chats and remembers it,
-// so that a reply can be matched to the task.
-func (t *Bot) sendAboutTask(ctx context.Context, chats []int64, task storage.Task, kind, text string, markup models.ReplyMarkup) {
+// so that a reply can be matched to the task. It reports whether anything was
+// delivered; with no chats at all there is nothing to retry, so that counts.
+func (t *Bot) sendAboutTask(ctx context.Context, chats []int64, task storage.Task, kind, text string, markup models.ReplyMarkup) (delivered bool) {
 	if len(chats) == 0 {
 		t.log.Warn("no content chats to send to; assign one in /chats", "task", task.ID, "text", preview(text))
+		return true
 	}
 	for _, chatID := range chats {
 		for _, m := range t.notify(ctx, chatID, text, markup) {
+			delivered = true
 			if err := t.store.AddTaskMessage(ctx, m.Chat.ID, m.ID, task.ID, kind); err != nil {
 				t.log.Error("save task message", "task", task.ID, "err", err)
 			}
 		}
 	}
+	return delivered
 }
 
 // taskWho names whom a message about the task is for: its assignees by name,

@@ -5,20 +5,19 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"remindbot/internal/config"
 )
 
-// newLogger logs to stdout and, with LOG_FILE, appends a copy to that file;
-// closeLog closes it. Secrets are cut out of every log line, whoever writes it.
+// newLogger logs to stdout and, with LOG_FILE, appends a copy to that file,
+// rotated by size (logrotate.go); closeLog closes it. Secrets are cut out of every log line, whoever writes it.
 func newLogger(cfg config.Config) (log *slog.Logger, closeLog func()) {
 	var w io.Writer = os.Stdout
 	closeLog = func() {}
 	var fileErr error
 	if cfg.LogFile != "" {
-		f, err := openLogFile(cfg.LogFile)
+		f, err := openRotatingFile(cfg.LogFile, logMaxSize, logKeep)
 		if err == nil {
 			w, closeLog = io.MultiWriter(os.Stdout, f), func() { f.Close() }
 		}
@@ -37,13 +36,6 @@ func newLogger(cfg config.Config) (log *slog.Logger, closeLog func()) {
 		log.Warn("cannot open LOG_FILE, logging to stdout only", "path", cfg.LogFile, "err", fileErr)
 	}
 	return log, closeLog
-}
-
-func openLogFile(path string) (*os.File, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return nil, err
-	}
-	return os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 }
 
 // redactAttr replaces secrets in a log attribute, the message included.

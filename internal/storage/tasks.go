@@ -208,6 +208,40 @@ func (s *Store) CloseUnanswered(ctx context.Context, id string, attempts int) (b
 		WHERE id = $1 AND status = 'pending' AND attempts = $2`, id, attempts)
 }
 
+// The Release* functions undo a claim whose message did not go, so the step
+// is taken again. Each only applies if nothing has moved the task since.
+
+// ReleaseMaterial puts the material step back from step+1 to step.
+func (s *Store) ReleaseMaterial(ctx context.Context, id string, step int, prevAt time.Time) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE tasks SET material_step = $2, material_step_at = $3
+		WHERE id = $1 AND material_step = $2 + 1 AND material_received_at IS NULL`, id, step, nullTime(prevAt))
+	return err
+}
+
+// ReleaseReminders puts the sent reminders back from n to sent.
+func (s *Store) ReleaseReminders(ctx context.Context, id string, sent, n int) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE tasks SET reminders_sent = $2
+		WHERE id = $1 AND status = 'pending' AND reminders_sent = $3`, id, sent, n)
+	return err
+}
+
+// ReleasePublishAttempt puts the "published?" attempt back from attempt+1.
+func (s *Store) ReleasePublishAttempt(ctx context.Context, id string, attempt int, prevAt time.Time) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE tasks SET attempts = $2, asked_at = $3
+		WHERE id = $1 AND status = 'pending' AND attempts = $2 + 1`, id, attempt, nullTime(prevAt))
+	return err
+}
+
+func nullTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
 func (s *Store) claim(ctx context.Context, sql string, args ...any) (bool, error) {
 	tag, err := s.pool.Exec(ctx, sql, args...)
 	return tag.RowsAffected() == 1, err

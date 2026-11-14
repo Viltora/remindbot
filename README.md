@@ -46,7 +46,8 @@ VPS (адрес — в `deploy.local.mk`, см. `deploy.local.mk.example`): Ubun
 | Команда | Что делает |
 |---|---|
 | `make deploy` | выложить код (rsync), пересобрать образ и перезапустить бота; ждёт, пока `/healthz` ответит `ok` |
-| `make server-logs` | логи бота |
+| `make server-logs` | логи бота (журнал Docker, обнуляется при деплое) |
+| `make server-logfile` | лог бота из файла `/opt/remindbot/logs/remindbot.log`, переживает деплой; 10 МБ × до 6 файлов |
 | `make server-psql` | консоль базы на сервере |
 
 `make deploy` не трогает на сервере `.env` и `secrets/` — перед первым деплоем их кладут
@@ -55,6 +56,8 @@ VPS (адрес — в `deploy.local.mk`, см. `deploy.local.mk.example`): Ubun
 ```bash
 SERVER=root@<адрес-сервера>   # то же, что в deploy.local.mk
 ssh $SERVER 'install -d -m 700 /opt/remindbot/secrets'
+# папка для лога: пишет бот под uid 10001
+ssh $SERVER 'install -d -o 10001 -g 10001 -m 700 /opt/remindbot/logs'
 scp .env $SERVER:/opt/remindbot/.env
 scp secrets/telegram_token secrets/yougile_api_key $SERVER:/opt/remindbot/secrets/
 # пароль базы на сервере — свой, не локальный; postgres в контейнере читает его под своим uid

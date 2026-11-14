@@ -38,7 +38,11 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       YOUGILE_API_KEY_FILE: /run/secrets/yougile_api_key
       HEALTH_ADDR: 127.0.0.1:8081
-      LOG_FILE: "" # в контейнере лог — только stdout: его собирает docker (logs, ротация)
+      # Копия лога в файл на сервере (/opt/remindbot/logs): переживает пересоздание контейнера при
+      # деплое. Ротация — в самом боте: 10 МБ на файл, 5 старых копий. Папка должна принадлежать uid 10001.
+      LOG_FILE: /logs/remindbot.log
+    volumes:
+      - ./logs:/logs
     secrets:
       - telegram_token
       - postgres_password

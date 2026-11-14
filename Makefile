@@ -13,7 +13,7 @@ DEPLOY_EXCLUDE := --exclude=/.env --exclude=/secrets/ --exclude=/backups/ --excl
 need-server:
 	@test -n "$(SERVER)" || (echo "SERVER не задан: cp deploy.local.mk.example deploy.local.mk и впиши адрес" && exit 1)
 
-.PHONY: setup secrets db-up db-down db-logs db-psql run build check test-db docs-pdf deploy server-logs server-psql
+.PHONY: setup secrets db-up db-down db-logs db-psql run build check test-db docs-pdf deploy server-logs server-logfile server-psql
 
 ## setup: первый запуск — .env, секреты, база
 setup: .env secrets db-up
@@ -63,6 +63,10 @@ test-db:
 deploy: need-server
 	rsync -az --delete $(DEPLOY_EXCLUDE) ./ $(SERVER):$(SERVER_DIR)/
 	ssh $(SERVER) 'cd $(SERVER_DIR) && VERSION=$(VERSION) docker compose up -d --build --wait --wait-timeout 180 bot'
+
+## server-logfile: лог бота из файла на сервере, с историей до деплоя (Ctrl+C — выйти)
+server-logfile: need-server
+	ssh -t $(SERVER) 'tail -n 200 -F $(SERVER_DIR)/logs/remindbot.log'
 
 ## server-logs: логи бота на сервере (Ctrl+C — выйти)
 server-logs: need-server

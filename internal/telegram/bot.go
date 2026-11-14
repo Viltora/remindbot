@@ -37,6 +37,11 @@ type Bot struct {
 	// yg reads tasks from YouGile; nil when there is no API key.
 	yg       *yougile.Client
 	lastSync atomic.Int64 // Unix time of the last successful sync, 0 = none yet
+	// lastSyncErr is the error of the last failed sync, for the alert.
+	lastSyncErr atomic.Value
+	// syncAlerted is set after a "sync is stale" alert, until it syncs again.
+	syncAlerted atomic.Bool
+	alerts      alerts
 	// skipsLogged remembers the skipped task steps already logged.
 	skipsLogged sync.Map
 
@@ -66,7 +71,15 @@ func New(ctx context.Context, cfg config.Config, store *storage.Store, log *slog
 		bot.WithSkipGetMe(), // called below with our context
 		bot.WithMiddlewares(t.trackInflight, t.logUpdate, t.observeGroups),
 		bot.WithDefaultHandler(t.onUnhandled),
-		bot.WithErrorsHandler(func(err error) { log.Error("telegram api error", "err", redact(err)) }),
+		// Telegram's own hiccups (502, timeouts) on receiving updates pass by
+		// themselves: the library polls again. They are warnings, not errors.
+		bot.WithErrorsHandler(func(err error) {
+			if isTransient(err) {
+				log.Warn("telegram api temporary error", "err", redact(err))
+				return
+			}
+			log.Error("telegram api error", "err", redact(err))
+		}),
 	)
 	if err != nil {
 		return nil, errors.New(redact(err))
@@ -170,7 +183,7 @@ func (t *Bot) reply(ctx context.Context, msg *models.Message, html string) {
 // send sends an HTML message; markup may be nil. It returns the sent message,
 // or nil if sending failed (the error is logged).
 func (t *Bot) send(ctx context.Context, chatID int64, html string, markup models.ReplyMarkup) *models.Message {
-	m, err := t.api.SendMessage(ctx, &bot.SendMessageParams{
+	m, err := t.sendWithRetry(ctx, &bot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        html,
 		ParseMode:   models.ParseModeHTML,
@@ -178,6 +191,7 @@ func (t *Bot) send(ctx context.Context, chatID int64, html string, markup models
 	})
 	if err != nil {
 		t.log.Error("send message", "chat_id", chatID, "text", preview(html), "err", err)
+		t.alertSendFailed(ctx, chatID, html, err)
 		return nil
 	}
 	t.log.Info("sent", "chat_id", chatID, "message_id", m.ID, "text", preview(html))

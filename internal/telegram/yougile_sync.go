@@ -67,7 +67,13 @@ func (t *Bot) workYouGileSync(ctx context.Context, _ *river.Job[yougileSyncArgs]
 		t.log.Info("yougile sync skipped at night", "next_at", fmt.Sprintf("%02d:05", yougileSyncFromHour))
 		return nil // RunOnStart at night
 	}
-	return t.syncYouGile(ctx, now)
+	if err := t.syncYouGile(ctx, now); err != nil {
+		t.lastSyncErr.Store(err.Error())
+		return err
+	}
+	t.lastSyncErr.Store("")
+	t.syncRecovered(ctx)
+	return nil
 }
 
 // syncYouGile copies the tasks of the tracked columns from YouGile. Any
