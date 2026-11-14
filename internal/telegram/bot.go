@@ -107,7 +107,7 @@ func New(ctx context.Context, cfg config.Config, store *storage.Store, log *slog
 	api.RegisterHandlerMatchFunc(t.command("status"), t.superadminOnly(t.onStatus))
 	api.RegisterHandlerMatchFunc(t.command("help"), t.superadminOnly(t.onHelp))
 	api.RegisterHandlerMatchFunc(t.command("chats"), t.superadminOnly(t.onChats))
-	api.RegisterHandlerMatchFunc(t.command("people"), t.superadminOnly(t.onPeople))
+	api.RegisterHandlerMatchFunc(t.command("people"), t.adminOnly(t.onPeople))
 	api.RegisterHandlerMatchFunc(t.command("hello"), t.onHello)
 	api.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbAdminPrefix, bot.MatchTypePrefix, t.onAdminCallback)
 	api.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbSalesPrefix, bot.MatchTypePrefix, t.onSalesAnswer)

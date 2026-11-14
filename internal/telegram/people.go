@@ -31,8 +31,11 @@ const (
 	assigneesLimit = 40
 )
 
+// onPeople shows /people: the superadmin can change roles and links, admins
+// only see who is who.
 func (t *Bot) onPeople(ctx context.Context, _ *bot.Bot, update *models.Update) {
-	text, markup, err := t.peopleScreen(ctx)
+	editable := isSuperadmin(t.roleOf(ctx, update.Message.From.ID))
+	text, markup, err := t.peopleScreen(ctx, editable)
 	if err != nil {
 		t.log.Error("people screen", "err", err)
 		t.send(ctx, update.Message.Chat.ID, "Не удалось загрузить людей, попробуй ещё раз.", nil)
@@ -57,7 +60,7 @@ var roleNames = map[storage.Role]string{
 
 // peopleScreen lists everyone with their role and YouGile link, and the
 // YouGile assignees nobody is linked to.
-func (t *Bot) peopleScreen(ctx context.Context) (string, models.ReplyMarkup, error) {
+func (t *Bot) peopleScreen(ctx context.Context, editable bool) (string, models.ReplyMarkup, error) {
 	people, err := t.store.ListPeople(ctx, t.superadminID, peopleLimit)
 	if err != nil {
 		return "", nil, err
@@ -104,11 +107,17 @@ func (t *Bot) peopleScreen(ctx context.Context) (string, models.ReplyMarkup, err
 	}
 	if len(unlinked) > 0 {
 		sb.WriteString("\n\n🔗 <b>В YouGile, но не связаны с Telegram:</b>\n" + strings.Join(unlinked, ", ") +
-			"\nБот пишет им имя без тега. Связать — в карточке человека (✏️).")
+			"\nБот пишет им имя без тега.")
+		if editable {
+			sb.WriteString(" Связать — в карточке человека (✏️).")
+		}
 	}
 	sb.WriteString("\n\nЛюди появляются здесь, когда пишут боту или нажимают «Начать» в приветствии в чате.")
+	if !editable {
+		sb.WriteString("\nМенять роли и связки может суперадмин.")
+	}
 	var markup models.ReplyMarkup
-	if len(rows) > 0 {
+	if editable && len(rows) > 0 {
 		markup = &models.InlineKeyboardMarkup{InlineKeyboard: rows}
 	}
 	return sb.String(), markup, nil
@@ -252,7 +261,7 @@ func (t *Bot) onPeopleCallback(ctx context.Context, b *bot.Bot, update *models.U
 	switch action {
 	case cbPeopleList:
 		answer("")
-		text, markup, err := t.peopleScreen(ctx)
+		text, markup, err := t.peopleScreen(ctx, true)
 		if err != nil {
 			t.log.Error("people screen", "err", err)
 			return

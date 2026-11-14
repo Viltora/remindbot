@@ -17,9 +17,9 @@ var (
 		{Command: "today", Description: "📅 Сегодня"},
 		{Command: "week", Description: "📊 Неделя"},
 		{Command: "month", Description: "🗓 Месяц"},
+		{Command: "people", Description: "👥 Люди: роли и YouGile"},
 	}
 	superadminCommands = append(adminCommands[:len(adminCommands):len(adminCommands)],
-		models.BotCommand{Command: "people", Description: "👥 Люди: роли и YouGile"},
 		models.BotCommand{Command: "admins", Description: "🛡 Роли: админы и sales"},
 		models.BotCommand{Command: "chats", Description: "💬 Чаты: материалы, выкладка, продажи"},
 		models.BotCommand{Command: "status", Description: "ℹ️ Статус"},
