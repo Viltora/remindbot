@@ -172,32 +172,7 @@ func (t *Bot) onAdminCallback(ctx context.Context, b *bot.Bot, update *models.Up
 		return
 	}
 
-	if err := t.store.SetRole(ctx, targetID, role); err != nil {
-		if errors.Is(err, storage.ErrNotFound) {
-			answer("Пользователь не найден")
-		} else {
-			t.log.Error("set role", "tg_id", targetID, "err", err)
-			answer("Ошибка, попробуй ещё раз")
-		}
-		return
-	}
-	t.log.Info("role changed", "tg_id", targetID, "role", role, "by", cq.From.ID)
-
-	// The user's private chat ID equals their user ID.
-	t.syncMenu(ctx, targetID, role)
-	switch role {
-	case storage.RoleAdmin:
-		answer("Назначен админом")
-		t.send(ctx, targetID, "Тебя назначили админом бота. Команды — в меню слева от поля ввода.", nil)
-	case storage.RoleSales:
-		answer("Назначен sales")
-		t.send(ctx, targetID, "Тебе назначена роль sales 💼\n"+
-			"По будням в 18:00 я буду напоминать отправить отчёт за день.", nil)
-	default:
-		answer("Роль снята")
-		t.send(ctx, targetID, "Твоя роль в боте снята.", nil)
-	}
-
+	answer(t.applyRole(ctx, targetID, role, cq.From.ID))
 	t.refreshAdminsScreen(ctx, cq.Message)
 }
 
@@ -223,17 +198,31 @@ func (t *Bot) refreshAdminsScreen(ctx context.Context, m models.MaybeInaccessibl
 	}
 }
 
-// notifyNewUser tells the superadmin that someone without access wrote to the bot.
-func (t *Bot) notifyNewUser(ctx context.Context, u storage.User) {
-	if t.superadminID == 0 {
-		return
+// applyRole sets a person's role, updates their menu and tells them. It
+// returns the text for the button answer.
+func (t *Bot) applyRole(ctx context.Context, targetID int64, role storage.Role, by int64) string {
+	if err := t.store.SetRole(ctx, targetID, role); err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return "Пользователь не найден"
+		}
+		t.log.Error("set role", "tg_id", targetID, "err", err)
+		return "Ошибка, попробуй ещё раз"
 	}
-	text := fmt.Sprintf("👤 Боту написал новый человек: %s\nID: <code>%d</code>", displayName(u), u.TgID)
-	markup := &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{
-		{Text: "⭐ Сделать админом", CallbackData: fmt.Sprintf("%s%s:%d", cbAdminPrefix, cbAdminAdd, u.TgID)},
-		{Text: "💼 Сделать sales", CallbackData: fmt.Sprintf("%s%s:%d", cbAdminPrefix, cbAdminSales, u.TgID)},
-	}}}
-	t.send(ctx, t.superadminID, text, markup)
+	t.log.Info("role changed", "tg_id", targetID, "role", role, "by", by)
+
+	// The user's private chat ID equals their user ID.
+	t.syncMenu(ctx, targetID, role)
+	switch role {
+	case storage.RoleAdmin:
+		t.send(ctx, targetID, "Тебя назначили админом бота. Команды — в меню слева от поля ввода.", nil)
+		return "Назначен админом"
+	case storage.RoleSales:
+		t.send(ctx, targetID, "Тебе назначена роль продажника 💼\n"+
+			"По понедельникам, средам и пятницам в 16:00 я буду напоминать заполнить отчёт в Яндекс Документах.", nil)
+		return "Назначен продажником"
+	}
+	t.send(ctx, targetID, "Твоя роль в боте снята.", nil)
+	return "Роль снята"
 }
 
 func (t *Bot) onStatus(ctx context.Context, _ *bot.Bot, update *models.Update) {

@@ -124,6 +124,10 @@ func (t *Bot) onChatCallback(ctx context.Context, b *bot.Bot, update *models.Upd
 		return
 	}
 
+	prev, err := t.store.ChatPurposeOf(ctx, chatID)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		t.log.Error("chat purpose", "chat_id", chatID, "err", err)
+	}
 	if err := t.store.SetChatPurpose(ctx, chatID, purpose); err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			answer("Чат не найден")
@@ -135,6 +139,11 @@ func (t *Bot) onChatCallback(ctx context.Context, b *bot.Bot, update *models.Upd
 	}
 	t.log.Info("chat purpose changed", "chat_id", chatID, "purpose", purpose)
 	answer("Готово: " + purposeLabels[purpose])
+	// A chat that just got its role is greeted: people learn what the bot
+	// does there and start it in one tap.
+	if purpose != storage.PurposeNone && purpose != prev {
+		t.greetChat(ctx, chatID, purpose)
+	}
 
 	// Redraw as the chats screen: it shows the result for every chat.
 	if m := cq.Message.Message; m != nil {

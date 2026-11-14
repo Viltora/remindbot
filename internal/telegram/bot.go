@@ -27,6 +27,7 @@ type Bot struct {
 	log          *slog.Logger
 	username     string
 	botID        int64
+	firstName    string // the bot's display name, for the greeting
 	superadminID int64
 	// testRecipients get every scheduled notification in test mode; none = off.
 	testRecipients []int64
@@ -94,6 +95,7 @@ func New(ctx context.Context, cfg config.Config, store *storage.Store, log *slog
 	t.api = api
 	t.username = me.Username
 	t.botID = me.ID
+	t.firstName = me.FirstName
 
 	api.RegisterHandlerMatchFunc(t.command("start"), t.onStart)
 	api.RegisterHandlerMatchFunc(t.command("whoami"), t.onWhoami)
@@ -105,9 +107,12 @@ func New(ctx context.Context, cfg config.Config, store *storage.Store, log *slog
 	api.RegisterHandlerMatchFunc(t.command("status"), t.superadminOnly(t.onStatus))
 	api.RegisterHandlerMatchFunc(t.command("help"), t.superadminOnly(t.onHelp))
 	api.RegisterHandlerMatchFunc(t.command("chats"), t.superadminOnly(t.onChats))
+	api.RegisterHandlerMatchFunc(t.command("people"), t.superadminOnly(t.onPeople))
+	api.RegisterHandlerMatchFunc(t.command("hello"), t.onHello)
 	api.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbAdminPrefix, bot.MatchTypePrefix, t.onAdminCallback)
 	api.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbSalesPrefix, bot.MatchTypePrefix, t.onSalesAnswer)
 	api.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbChatPrefix, bot.MatchTypePrefix, t.onChatCallback)
+	api.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbPeoplePrefix, bot.MatchTypePrefix, t.onPeopleCallback)
 	api.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbPublishPrefix, bot.MatchTypePrefix, t.onPublishAnswer)
 	api.RegisterHandler(bot.HandlerTypeCallbackQueryData, "noop", bot.MatchTypeExact, t.onNoop)
 	// After the commands: a command sent as a reply is still a command.

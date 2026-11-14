@@ -255,39 +255,64 @@ func (t *Bot) sendAboutTask(ctx context.Context, chats []int64, task storage.Tas
 	return delivered
 }
 
-// taskWho names whom a message about the task is for: its assignees by name,
-// or the primary admin with a tag when there are none.
+// taskWho names whom a message about the task is for: its assignees, tagged
+// when linked to Telegram (/people), else by name; or the primary admin with
+// a tag when there are none.
 func (t *Bot) taskWho(ctx context.Context, task storage.Task) (string, error) {
 	if len(task.Assignees) == 0 {
 		return t.adminToTag(ctx)
-	}
-	return t.assigneeNames(ctx, task)
-}
-
-// assigneeNames lists the task's assignees by their YouGile names, HTML-escaped.
-func (t *Bot) assigneeNames(ctx context.Context, task storage.Task) (string, error) {
-	if len(task.Assignees) == 0 {
-		return "", nil
 	}
 	names, err := t.store.YouGileNames(ctx, task.Assignees)
 	if err != nil {
 		return "", err
 	}
-	return joinNames(task.Assignees, names), nil
+	users, err := t.store.AssigneeUsers(ctx, task.Assignees)
+	if err != nil {
+		return "", err
+	}
+	return whoTagged(task.Assignees, names, users), nil
 }
 
-// joinNames lists YouGile users by name, HTML-escaped; "" for none.
+// whoTagged lists assignees: a mention for those linked to Telegram, the
+// YouGile name for the rest, never an e-mail; HTML-escaped.
+func whoTagged(ids []string, names map[string]string, users map[string]storage.User) string {
+	var out []string
+	for _, id := range ids {
+		if u, ok := users[id]; ok {
+			out = append(out, mention(u))
+		} else if name := personName(names[id]); name != "" {
+			out = append(out, html.EscapeString(name))
+		}
+	}
+	if len(out) == 0 {
+		return "исполнитель"
+	}
+	return strings.Join(out, ", ")
+}
+
+// joinNames lists YouGile users by name, HTML-escaped; "" for none. For
+// reports: names, no tags.
 func joinNames(ids []string, names map[string]string) string {
 	var out []string
 	for _, id := range ids {
-		if name := names[id]; name != "" {
+		if name := personName(names[id]); name != "" {
 			out = append(out, html.EscapeString(name))
 		}
 	}
 	if len(out) == 0 && len(ids) > 0 {
-		return "исполнитель из YouGile"
+		return "исполнитель"
 	}
 	return strings.Join(out, ", ")
+}
+
+// personName is a YouGile name fit to show the team: YouGile puts the e-mail
+// in the name when none is set, and an e-mail is not shown.
+func personName(name string) string {
+	name = strings.TrimSpace(name)
+	if strings.Contains(name, "@") {
+		return ""
+	}
+	return name
 }
 
 func publishButtons(task storage.Task) models.ReplyMarkup {

@@ -75,10 +75,18 @@ func scanUser(row pgx.CollectableRow) (User, error) {
 	return u, err
 }
 
-// MarkStarted records that the user wrote /start to the bot in private.
-func (s *Store) MarkStarted(ctx context.Context, tgID int64) error {
-	_, err := s.pool.Exec(ctx, `UPDATE users SET started_at = now() WHERE tg_id = $1`, tgID)
-	return err
+// MarkStarted records that the user wrote /start to the bot in private;
+// first reports whether it is the first time.
+func (s *Store) MarkStarted(ctx context.Context, tgID int64) (first bool, err error) {
+	err = s.pool.QueryRow(ctx, `
+		UPDATE users u SET started_at = now()
+		FROM (SELECT started_at FROM users WHERE tg_id = $1 FOR UPDATE) old
+		WHERE u.tg_id = $1
+		RETURNING old.started_at IS NULL`, tgID).Scan(&first)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, ErrNotFound
+	}
+	return first, err
 }
 
 // ListAdminCandidates returns regular users who have started the bot, so the

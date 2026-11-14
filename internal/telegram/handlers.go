@@ -23,22 +23,25 @@ func (t *Bot) onStart(ctx context.Context, _ *bot.Bot, update *models.Update) {
 		Username:  msg.From.Username,
 		FirstName: msg.From.FirstName,
 	}
-	created, err := t.store.TouchUser(ctx, u)
+	_, err := t.store.TouchUser(ctx, u)
+	var first bool
 	if err == nil {
-		err = t.store.MarkStarted(ctx, u.TgID)
+		first, err = t.store.MarkStarted(ctx, u.TgID)
 	}
 	if err != nil {
 		t.log.Error("save user", "tg_id", u.TgID, "err", err)
+	}
+	if first {
+		t.log.Info("person started the bot", "tg_id", u.TgID)
+		t.notifyNewPerson(ctx, u)
 	}
 
 	role := t.roleOf(ctx, u.TgID)
 	if !isAdmin(role) {
 		t.send(ctx, msg.Chat.ID,
-			"Это приватный бот команды. Если тебе нужен доступ, напиши администратору.",
+			"Привет! Готово 👍 Теперь я смогу отмечать тебя в рабочих чатах, когда нужно что-то прислать или выложить. "+
+				"Писать мне ничего не нужно.",
 			removeKeyboard)
-		if created {
-			t.notifyNewUser(ctx, u)
-		}
 		return
 	}
 
