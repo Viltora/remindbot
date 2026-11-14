@@ -32,8 +32,10 @@ type Bot struct {
 	testRecipients []int64
 	tz             *time.Location
 	// features are the scenarios switched on in .env.
-	features  config.Features
-	startedAt time.Time
+	features config.Features
+	// salesReportURL is the sales report in Yandex Documents, "" if not set.
+	salesReportURL string
+	startedAt      time.Time
 	// yg reads tasks from YouGile; nil when there is no API key.
 	yg       *yougile.Client
 	lastSync atomic.Int64 // Unix time of the last successful sync, 0 = none yet
@@ -61,7 +63,7 @@ func New(ctx context.Context, cfg config.Config, store *storage.Store, log *slog
 	}
 
 	t := &Bot{store: store, log: log, superadminID: cfg.SuperadminID, testRecipients: cfg.TestRecipientIDs,
-		tz: cfg.Timezone, features: cfg.Features, startedAt: time.Now()}
+		tz: cfg.Timezone, features: cfg.Features, salesReportURL: cfg.SalesReportURL, startedAt: time.Now()}
 	if cfg.YouGileAPIKey != "" {
 		t.yg = yougile.New(cfg.YouGileAPIKey, log)
 	} else {

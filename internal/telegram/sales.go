@@ -41,6 +41,8 @@ const (
 // always on; the evening poll above is FEATURE_SALES_POLL.
 const salesRemindCron = "0 16 * * 1,3,5"
 
+const salesRemindText = "пора заполнить отчёт в Яндекс Документах."
+
 type salesRemindArgs struct{}
 
 func (salesRemindArgs) Kind() string { return "sales_remind" }
@@ -54,8 +56,14 @@ func (t *Bot) workSalesRemind(ctx context.Context, _ *river.Job[salesRemindArgs]
 	if err != nil {
 		return err
 	}
+	var markup models.ReplyMarkup
+	if t.salesReportURL != "" {
+		markup = &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{
+			{Text: "📄 Открыть отчёт", URL: t.salesReportURL},
+		}}}
+	}
 	for _, u := range users {
-		out.send(ctx, u, "пора заполнить отчёт — пришли его "+out.sendTo+".", nil)
+		out.send(ctx, u, salesRemindText, markup)
 	}
 	t.log.Info("sales reminder", "users", len(users), "in_chat", len(out.chats) > 0)
 	return nil

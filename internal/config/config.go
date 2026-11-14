@@ -29,6 +29,9 @@ type Config struct {
 	Timezone      *time.Location
 	HealthAddr    string
 	LogLevel      slog.Level
+	// SalesReportURL is the sales report in Yandex Documents; when set, the
+	// reminder to fill it in gets a button with the link.
+	SalesReportURL string
 	// LogFile, if set, gets a copy of the logs (appended).
 	LogFile string
 	DB      DB
@@ -120,6 +123,10 @@ func Load() (Config, error) {
 	}
 
 	cfg.LogFile = os.Getenv("LOG_FILE")
+	cfg.SalesReportURL = strings.TrimSpace(os.Getenv("SALES_REPORT_URL"))
+	if u := cfg.SalesReportURL; u != "" && !strings.HasPrefix(u, "https://") {
+		errs = append(errs, fmt.Errorf("SALES_REPORT_URL: нужна ссылка, начинающаяся с https://, получено %q", u))
+	}
 	if err := cfg.LogLevel.UnmarshalText([]byte(env("LOG_LEVEL", "info"))); err != nil {
 		errs = append(errs, fmt.Errorf("LOG_LEVEL: %w", err))
 	}
