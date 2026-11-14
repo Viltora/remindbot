@@ -140,14 +140,6 @@ func TestPublishDue(t *testing.T) {
 	check("07:00 stories get the 06:30 reminder", seven, at(23, 6, 30), publishRemind, 1)
 }
 
-func TestMinutesText(t *testing.T) {
-	for n, want := range map[int]string{1: "1 минуту", 2: "2 минуты", 5: "5 минут", 11: "11 минут", 12: "12 минут", 21: "21 минуту", 22: "22 минуты", 30: "30 минут"} {
-		if got := minutesText(n); got != want {
-			t.Errorf("minutesText(%d) = %q, want %q", n, got, want)
-		}
-	}
-}
-
 func TestWhenText(t *testing.T) {
 	now := at(22, 9, 0) // Thu
 	for p, want := range map[time.Time]string{

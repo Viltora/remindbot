@@ -171,9 +171,6 @@ func (t *Bot) sendPublishStep(ctx context.Context, task storage.Task, act publis
 		step, markup = "question", publishButtons(task)
 		text = fmt.Sprintf("❓ %s\n<i>Попытка %d из %d</i>",
 			addressed(who, what+" ("+clock(p)+") "+task.Type.Published()+"?"), n, publishAttempts)
-	case n > 1:
-		mins := max(1, int(p.Sub(now.Truncate(time.Minute)).Minutes()))
-		text = "🔔 " + addressed(who, "через "+minutesText(mins)+" "+what)
 	}
 
 	var claimed bool
@@ -550,9 +547,4 @@ func whenText(p, now time.Time) string {
 		return "завтра в " + clock(p)
 	}
 	return "в " + formatDay(p) + " в " + clock(p)
-}
-
-// minutesText renders "N минут" with the right ending.
-func minutesText(n int) string {
-	return fmt.Sprintf("%d %s", n, plural(n, "минуту", "минуты", "минут"))
 }

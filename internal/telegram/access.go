@@ -19,11 +19,11 @@ var (
 		{Command: "month", Description: "🗓 Месяц"},
 		{Command: "people", Description: "👥 Люди: роли и YouGile"},
 		{Command: "chats", Description: "💬 Чаты: материалы, выкладка, продажи"},
-		{Command: "status", Description: "ℹ️ Статус"},
-		{Command: "help", Description: "❓ Что умеет бот"},
 	}
 	superadminCommands = append(adminCommands[:len(adminCommands):len(adminCommands)],
 		models.BotCommand{Command: "admins", Description: "🛡 Роли: админы и sales"},
+		models.BotCommand{Command: "status", Description: "ℹ️ Статус"},
+		models.BotCommand{Command: "help", Description: "❓ Что умеет бот"},
 	)
 )
 

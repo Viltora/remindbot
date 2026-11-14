@@ -48,20 +48,14 @@ func (t *Bot) onBotAdded(ctx context.Context, upd *models.ChatMemberUpdated) {
 		return
 	}
 
-	// The question goes to the superadmin and to the admin who added the
-	// bot: either of them can answer.
+	// Only the superadmin is asked, so there is one answer (admins can change
+	// it later in /chats).
+	if t.superadminID == 0 {
+		return
+	}
 	text := fmt.Sprintf("✅ %s добавил бота в чат «%s».\nДля чего этот чат?",
 		displayName(by), html.EscapeString(chat.Title))
-	var to []int64
-	if t.superadminID != 0 {
-		to = append(to, t.superadminID)
-	}
-	if by.TgID != t.superadminID {
-		to = append(to, by.TgID)
-	}
-	for _, id := range to {
-		t.send(ctx, id, text, purposeButtons(chat.ID))
-	}
+	t.send(ctx, t.superadminID, text, purposeButtons(chat.ID))
 }
 
 func (t *Bot) onChats(ctx context.Context, _ *bot.Bot, update *models.Update) {

@@ -132,16 +132,12 @@ func roleOrMember(u storage.User) storage.Role {
 
 // personCard shows one person: role buttons and whom they are in YouGile.
 func (t *Bot) personCard(ctx context.Context, tgID int64) (string, models.ReplyMarkup, error) {
-	u, err := t.store.GetUser(ctx, tgID)
+	u, started, err := t.store.GetPerson(ctx, tgID)
 	if err != nil {
 		return "", nil, err
 	}
 	if tgID == t.superadminID {
 		u.Role = storage.RoleSuperadmin
-	}
-	started, err := t.store.HasStarted(ctx, tgID)
-	if err != nil {
-		return "", nil, err
 	}
 	cur, hasYG, err := t.store.LinkedYouGile(ctx, tgID)
 	if err != nil {
@@ -168,6 +164,12 @@ func (t *Bot) personCard(ctx context.Context, tgID int64) (string, models.ReplyM
 		text = strings.Replace(text, "\n\nКто это в YouGile?",
 			"\n<i>Ещё не нажал «Начать» в личке с ботом — роль можно дать после этого: бот должен иметь возможность ему написать.</i>"+
 				"\n\nКто это в YouGile?", 1)
+		// A role given earlier can still be taken away.
+		if roleOrMember(u) != storage.RoleMember {
+			rows = append(rows, []models.InlineKeyboardButton{{
+				Text: "👤 Снять роль", CallbackData: peopleData(cbPeopleRole, tgID, string(storage.RoleMember)),
+			}})
+		}
 	}
 	if u.Role != storage.RoleSuperadmin && started {
 		mark := func(r storage.Role, label string) models.InlineKeyboardButton {
@@ -279,17 +281,23 @@ func (t *Bot) onPeopleCallback(ctx context.Context, b *bot.Bot, update *models.U
 			answer("Некорректная кнопка")
 			return
 		}
-		u, err := t.store.GetUser(ctx, tgID)
+		u, started, err := t.store.GetPerson(ctx, tgID)
+		if errors.Is(err, storage.ErrNotFound) {
+			answer("Пользователь не найден")
+			return
+		}
 		if err != nil {
 			t.log.Error("load user", "tg_id", tgID, "err", err)
-			answer("Пользователь не найден")
+			answer("Ошибка, попробуй ещё раз")
 			return
 		}
 		if roleOrMember(u) == role {
 			answer("Роль уже такая")
 			return
 		}
-		if started, err := t.store.HasStarted(ctx, tgID); err != nil || !started {
+		// Only giving a role needs the bot to be able to write to the person;
+		// taking one away does not.
+		if role != storage.RoleMember && !started {
 			answer("Сначала человек должен нажать «Начать» в личке с ботом")
 			return
 		}
@@ -360,16 +368,14 @@ func (t *Bot) onPeopleCallback(ctx context.Context, b *bot.Bot, update *models.U
 // linkedElsewhere returns the YouGile person ygID if it is linked to a
 // Telegram user other than tgID.
 func (t *Bot) linkedElsewhere(ctx context.Context, ygID string, tgID int64) (storage.YouGilePerson, bool, error) {
-	assignees, err := t.store.Assignees(ctx)
+	p, err := t.store.YouGileOwner(ctx, ygID)
+	if errors.Is(err, storage.ErrNotFound) {
+		return storage.YouGilePerson{}, false, nil // LinkYouGile reports it
+	}
 	if err != nil {
 		return storage.YouGilePerson{}, false, err
 	}
-	for _, a := range assignees {
-		if a.ID == ygID && a.User.TgID != 0 && a.User.TgID != tgID {
-			return a, true, nil
-		}
-	}
-	return storage.YouGilePerson{}, false, nil
+	return p, p.User.TgID != 0 && p.User.TgID != tgID, nil
 }
 
 // editScreen redraws the message a button was pressed on.

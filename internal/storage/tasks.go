@@ -30,7 +30,7 @@ type Task struct {
 	MaterialStepAt     time.Time
 	MaterialReceivedAt time.Time
 
-	RemindersSent   int // 1 an hour before, 2 half an hour before
+	RemindersSent   int // reminders sent before P; one since 14.11.2026, half an hour before
 	Attempts        int // "published?" questions asked
 	AskedAt         time.Time
 	Status          PublishStatus

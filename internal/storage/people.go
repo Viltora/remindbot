@@ -109,15 +109,35 @@ func (s *Store) ListPeople(ctx context.Context, superadminID int64, limit int) (
 	return pgx.CollectRows(rows, scanUser)
 }
 
-// HasStarted reports whether the user has pressed Start in a private chat
-// with the bot, so the bot can write to them.
-func (s *Store) HasStarted(ctx context.Context, tgID int64) (bool, error) {
-	var started bool
-	err := s.pool.QueryRow(ctx, `SELECT started_at IS NOT NULL FROM users WHERE tg_id = $1`, tgID).Scan(&started)
+// GetPerson returns the user and whether they have pressed Start in a
+// private chat with the bot, in one query.
+func (s *Store) GetPerson(ctx context.Context, tgID int64) (u User, started bool, err error) {
+	err = s.pool.QueryRow(ctx, `
+		SELECT tg_id, COALESCE(username, ''), first_name, role, started_at IS NOT NULL
+		FROM users WHERE tg_id = $1`, tgID).
+		Scan(&u.TgID, &u.Username, &u.FirstName, &u.Role, &started)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, ErrNotFound
+		return User{}, false, ErrNotFound
 	}
-	return started, err
+	return u, started, err
+}
+
+// YouGileOwner returns the YouGile person ygID with the Telegram user linked
+// to it (User.TgID 0 = none).
+func (s *Store) YouGileOwner(ctx context.Context, ygID string) (YouGilePerson, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT y.id, y.real_name,
+		       COALESCE(u.tg_id, 0), COALESCE(u.username, ''), COALESCE(u.first_name, ''), COALESCE(u.role, '')
+		FROM yougile_users y LEFT JOIN users u ON u.tg_id = y.tg_id
+		WHERE y.id = $1`, ygID)
+	if err != nil {
+		return YouGilePerson{}, err
+	}
+	p, err := pgx.CollectExactlyOneRow(rows, scanPerson)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return YouGilePerson{}, ErrNotFound
+	}
+	return p, err
 }
 
 // ChatPurposeOf returns the chat's purpose (PurposeNone if not assigned).
