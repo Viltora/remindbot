@@ -403,7 +403,7 @@ func (t *Bot) notifyNewPerson(ctx context.Context, u storage.User) {
 // opens a private chat with the bot, so people start it in one tap.
 var greetAbout = map[storage.ChatPurpose]string{
 	storage.PurposeMaterial: "буду просить здесь материал на согласование — за сутки до поста или рилс",
-	storage.PurposePublish:  "буду напоминать здесь о выкладке — за час и за полчаса до публикации",
+	storage.PurposePublish:  "буду напоминать здесь о выкладке — за полчаса до публикации",
 	storage.PurposeSales:    "буду напоминать здесь заполнить отчёт в Яндекс Документах — по понедельникам, средам и пятницам",
 	storage.PurposeContent:  "буду просить здесь материал на согласование и напоминать о выкладке",
 }

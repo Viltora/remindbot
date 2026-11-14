@@ -19,7 +19,7 @@ import (
 //
 // Publishing (all types):
 //
-//	P−60m, P−30m  reminders: only the latest due one, only before P
+//	P−30m         reminder, only before P
 //	P+30m         "published?" [Yes] [No], then every 30 minutes, 4 times
 //	+30m          "no answer" is recorded, no message
 const (
@@ -38,8 +38,9 @@ const (
 	askCatchUp = 4 * time.Hour
 )
 
-// publishReminders are how long before P the reminders go, in order.
-var publishReminders = []time.Duration{time.Hour, 30 * time.Minute}
+// publishReminders are how long before P the reminders go, in order. Since
+// 14.11.2026 there is one, half an hour before (it was 60 and 30 minutes).
+var publishReminders = []time.Duration{30 * time.Minute}
 
 // materialRequestTime is when the material is asked for: a day before p, but
 // not on a weekend — then on Friday, so it is ready before the weekend. If

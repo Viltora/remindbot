@@ -95,13 +95,16 @@ func TestPublishDue(t *testing.T) {
 		}
 	}
 
-	check("early", story, at(22, 9, 59), publishNone, 0)
-	check("an hour before", story, at(22, 10, 0), publishRemind, 1)
-	check("missed the first, before the second", story, at(22, 10, 20), publishRemind, 1)
-	check("missed both: only the second", story, at(22, 10, 40), publishRemind, 2)
+	check("an hour before: nothing", story, at(22, 10, 0), publishNone, 0)
+	check("early", story, at(22, 10, 29), publishNone, 0)
+	check("half an hour before", story, at(22, 10, 30), publishRemind, 1)
+	check("late but before P", story, at(22, 10, 50), publishRemind, 1)
 	sent := story
-	sent.RemindersSent = 2
-	check("both sent", sent, at(22, 10, 50), publishNone, 0)
+	sent.RemindersSent = 1
+	check("sent", sent, at(22, 10, 50), publishNone, 0)
+	old := story
+	old.RemindersSent = 2 // from when there were two reminders
+	check("old rows with two sent", old, at(22, 10, 50), publishNone, 0)
 	check("at P", story, at(22, 11, 0), publishNone, 0)
 
 	check("question 1", story, at(22, 11, 30), publishAsk, 1)
@@ -127,12 +130,14 @@ func TestPublishDue(t *testing.T) {
 	check("question in the morning", early, at(23, 6, 0), publishAsk, 1)
 
 	quarter := storage.Task{Type: storage.TaskPost, PublishAt: at(23, 6, 15), Status: storage.PublishPending}
-	check("both reminders moved to 06:00: the second", quarter, at(23, 6, 0), publishRemind, 2)
+	check("reminder moved to 06:00, still before P", quarter, at(23, 6, 0), publishRemind, 1)
 
-	// Stories at 07:00: the reminder an hour before falls on 06:00, the end
-	// of quiet hours, and goes.
+	// Stories at 06:00: the reminder at 05:30 is in quiet hours and would
+	// move past P, so there is none.
+	six := storage.Task{Type: storage.TaskStories, PublishAt: at(23, 6, 0), Status: storage.PublishPending}
+	check("06:00 stories: no reminder", six, at(23, 6, 0), publishNone, 0)
 	seven := storage.Task{Type: storage.TaskStories, PublishAt: at(23, 7, 0), Status: storage.PublishPending}
-	check("07:00 stories get the 06:00 reminder", seven, at(23, 6, 0), publishRemind, 1)
+	check("07:00 stories get the 06:30 reminder", seven, at(23, 6, 30), publishRemind, 1)
 }
 
 func TestMinutesText(t *testing.T) {
