@@ -29,10 +29,10 @@ func TestMaterialRequestTime(t *testing.T) {
 		{at(25, 12, 0), at(23, 12, 0)}, // Sun → Sat → Fri
 		{at(24, 12, 0), at(23, 12, 0)}, // Sat → Fri anyway
 		{at(26, 8, 0), at(23, 8, 0)},   // Mon 08:00 → Fri 08:00, after quiet hours
-		{at(20, 6, 30), at(19, 7, 0)},  // Tue 06:30 → Mon 06:30 → 07:00
-		{at(26, 22, 30), at(23, 7, 0)}, // Mon 22:30 → Fri 22:30 → quiet hours → Sat → Fri 07:00
-		{at(24, 22, 0), at(23, 7, 0)},  // Sat 22:00 → Fri 22:00 → quiet hours → Sat → Fri 07:00
-		{at(21, 23, 0), at(21, 7, 0)},  // Wed 23:00 → Tue 23:00 → quiet hours → Wed 07:00 (a weekday stays)
+		{at(20, 5, 30), at(19, 6, 0)},  // Tue 05:30 → Mon 05:30 → 06:00
+		{at(26, 22, 30), at(23, 6, 0)}, // Mon 22:30 → Fri 22:30 → quiet hours → Sat → Fri 06:00
+		{at(24, 22, 0), at(23, 6, 0)},  // Sat 22:00 → Fri 22:00 → quiet hours → Sat → Fri 06:00
+		{at(21, 23, 0), at(21, 6, 0)},  // Wed 23:00 → Tue 23:00 → quiet hours → Wed 06:00 (a weekday stays)
 	} {
 		if got := materialRequestTime(tc.publish); !got.Equal(tc.want) {
 			t.Errorf("publish %s: request %s, want %s", tc.publish.Format(time.DateTime), got.Format(time.DateTime), tc.want.Format(time.DateTime))
@@ -83,7 +83,7 @@ func TestMaterialDue(t *testing.T) {
 	late := post
 	late.MaterialStep, late.MaterialStepAt = 1, at(19, 21, 30)
 	check("reminder in quiet hours waits", late, at(19, 22, 30), 0, false)
-	check("reminder after quiet hours", late, at(20, 7, 0), 2, true)
+	check("reminder after quiet hours", late, at(20, 6, 0), 2, true)
 }
 
 func TestPublishDue(t *testing.T) {
@@ -121,18 +121,18 @@ func TestPublishDue(t *testing.T) {
 	answered.Status = storage.PublishDone
 	check("answered", answered, at(22, 13, 30), publishNone, 0)
 
-	early := storage.Task{Type: storage.TaskStories, PublishAt: at(23, 6, 0), Status: storage.PublishPending}
-	check("reminders in quiet hours are dropped", early, at(23, 5, 30), publishNone, 0)
-	check("question waits for the morning", early, at(23, 6, 59), publishNone, 0)
-	check("question in the morning", early, at(23, 7, 0), publishAsk, 1)
+	early := storage.Task{Type: storage.TaskStories, PublishAt: at(23, 5, 0), Status: storage.PublishPending}
+	check("reminders in quiet hours are dropped", early, at(23, 4, 30), publishNone, 0)
+	check("question waits for the morning", early, at(23, 5, 59), publishNone, 0)
+	check("question in the morning", early, at(23, 6, 0), publishAsk, 1)
 
-	quarter := storage.Task{Type: storage.TaskPost, PublishAt: at(23, 7, 15), Status: storage.PublishPending}
-	check("both reminders moved to 07:00: the second", quarter, at(23, 7, 0), publishRemind, 2)
+	quarter := storage.Task{Type: storage.TaskPost, PublishAt: at(23, 6, 15), Status: storage.PublishPending}
+	check("both reminders moved to 06:00: the second", quarter, at(23, 6, 0), publishRemind, 2)
 
-	// Stories at 08:00: the reminder an hour before falls on 07:00, the end
+	// Stories at 07:00: the reminder an hour before falls on 06:00, the end
 	// of quiet hours, and goes.
-	eight := storage.Task{Type: storage.TaskStories, PublishAt: at(23, 8, 0), Status: storage.PublishPending}
-	check("08:00 stories get the 07:00 reminder", eight, at(23, 7, 0), publishRemind, 1)
+	seven := storage.Task{Type: storage.TaskStories, PublishAt: at(23, 7, 0), Status: storage.PublishPending}
+	check("07:00 stories get the 06:00 reminder", seven, at(23, 6, 0), publishRemind, 1)
 }
 
 func TestMinutesText(t *testing.T) {

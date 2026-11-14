@@ -68,8 +68,8 @@ func TestSyncStale(t *testing.T) {
 		{"1h59m without a sync", at(14, 13, 34), at(14, 11, 35), false},
 		{"2h without a sync", at(14, 13, 35), at(14, 11, 35), true},
 		{"night: never stale", at(14, 3, 0), at(13, 22, 35), false},
-		{"morning after the night pause", at(14, 7, 0), at(13, 22, 35), false},
-		{"morning, nothing since 06:00 for 2h", at(14, 8, 0), at(13, 22, 35), true},
+		{"morning after the night pause", at(14, 6, 0), at(13, 22, 35), false},
+		{"morning, nothing since 05:00 for 2h", at(14, 7, 0), at(13, 22, 35), true},
 		{"no sync since a recent start", at(10, 13, 0), time.Time{}, false},
 	} {
 		var last int64

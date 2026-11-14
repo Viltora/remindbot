@@ -2,11 +2,11 @@ package telegram
 
 import "time"
 
-// Quiet hours: nothing scheduled is sent between 22:00 and 07:00 in the bot's
-// time zone; such sends move to 07:00.
+// Quiet hours: nothing scheduled is sent between 22:00 and 06:00 in the bot's
+// time zone; such sends move to 06:00.
 const (
 	quietFromHour = 22
-	quietToHour   = 7
+	quietToHour   = 6
 )
 
 func inQuietHours(t time.Time) bool {
