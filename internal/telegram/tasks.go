@@ -76,7 +76,11 @@ func (t *Bot) workTasksTick(ctx context.Context, _ *river.Job[tasksTickArgs]) er
 				t.log.Error("material step", "task", task.ID, "step", step, "err", err)
 			}
 		}
-		if act, n := publishDue(task, now); act != publishNone {
+		act, n := publishDue(task, now)
+		if !t.features.PublishQuestions && (act == publishAsk || act == publishNoAnswer) {
+			act = publishNone
+		}
+		if act != publishNone {
 			if err := t.sendPublishStep(ctx, task, act, n, now); err != nil {
 				t.log.Error("publish step", "task", task.ID, "act", act, "err", err)
 			}
@@ -106,7 +110,7 @@ func (t *Bot) sendMaterialStep(ctx context.Context, task storage.Task, step int)
 		return err
 	}
 	t.log.Info("material step", "task", task.ID, "title", task.Title, "type", task.Type,
-		"publish_at", task.PublishAt.In(t.tz).Format(time.DateTime), "step", step, "of", materialAdminStep)
+		"publish_at", task.PublishAt.In(t.tz).Format(time.DateTime), "step", step, "of", materialLastStep)
 	t.sendAboutTask(ctx, chats, task, storage.TaskMsgMaterial, text, nil)
 	return nil
 }
@@ -124,29 +128,14 @@ func (t *Bot) materialText(ctx context.Context, task storage.Task, step int) (st
 			"%s %s «%s». Пришли готовый согласованный материал — файл или ссылку — <b>ответом на это сообщение</b>.",
 			whenText(p, time.Now().In(t.tz)), task.Type.Noun(), title)) +
 			"\n💡 Не забудь про сторис и обложку.", nil
-	case step < materialAdminStep:
-		who, err := t.taskWho(ctx, task)
-		if err != nil {
-			return "", err
-		}
-		return "📎 " + addressed(who, fmt.Sprintf(
-			"напоминание %d/%d: жду материал для %s «%s» (%s) — файл или ссылку ответом на это сообщение.",
-			step-1, materialReminders, task.Type.NounOf(), title, dayTime(p))), nil
 	}
-	admin, err := t.adminToTag(ctx)
+	who, err := t.taskWho(ctx, task)
 	if err != nil {
 		return "", err
 	}
-	text := "⚠️ " + addressed(admin, fmt.Sprintf("материал для %s «%s» (%s) так и не прислали.",
-		task.Type.NounOf(), title, dayTime(p)))
-	names, err := t.assigneeNames(ctx, task)
-	if err != nil {
-		return "", err
-	}
-	if names != "" {
-		text += " Исполнитель: " + names + "."
-	}
-	return text, nil
+	return "📎 " + addressed(who, fmt.Sprintf(
+		"напоминание: жду материал для %s «%s» (%s) — файл или ссылку ответом на это сообщение.",
+		task.Type.NounOf(), title, dayTime(p))), nil
 }
 
 func (t *Bot) sendPublishStep(ctx context.Context, task storage.Task, act publishAction, n int, now time.Time) error {
@@ -212,7 +201,7 @@ func (t *Bot) logSkipped(task storage.Task, now time.Time) {
 		once("material", "material request skipped: its time has passed",
 			"request_at", materialRequestTime(p).Format(time.DateTime))
 	}
-	if ask := outsideQuietHours(p.Add(taskStep)); task.Status == storage.PublishPending &&
+	if ask := outsideQuietHours(p.Add(taskStep)); t.features.PublishQuestions && task.Status == storage.PublishPending &&
 		task.Attempts == 0 && now.Sub(ask) > askCatchUp {
 		once("ask", "publish question skipped: too late to ask", "ask_at", ask.Format(time.DateTime))
 	}

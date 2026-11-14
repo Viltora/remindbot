@@ -26,7 +26,7 @@ func sampleWeek() ([]storage.Task, map[string]string, []storage.SalesReport, tim
 		done(task(storage.TaskStories, "репост афиш", at(23, 8, 0), "ks"), 3),
 		func() storage.Task {
 			x := done(task(storage.TaskPost, "осенние напитки", at(23, 11, 0), "dj"), 3)
-			x.MaterialStep = materialAdminStep
+			x.MaterialStep = materialLastStep
 			return x
 		}(),
 		func() storage.Task {
@@ -59,7 +59,7 @@ func TestTodayText(t *testing.T) {
 			today = append(today, x)
 		}
 	}
-	got := todayText(today, names, now)
+	got := todayText(today, names, now, true)
 	t.Log("\n" + got)
 	for _, want := range []string{
 		"📌 <b>Публикации · 4</b>",
@@ -80,11 +80,11 @@ func TestTodayText(t *testing.T) {
 	// On Thursday the material for Friday's post is asked for.
 	thu := at(22, 12, 30)
 	friday := storage.Task{ID: "f", Type: storage.TaskPost, Title: "осенние напитки", PublishAt: at(23, 11, 0),
-		Assignees: []string{"dj"}, Status: storage.PublishPending, MaterialStep: 3, MaterialStepAt: at(22, 12, 0)}
-	got = todayText([]storage.Task{friday}, names, thu)
+		Assignees: []string{"dj"}, Status: storage.PublishPending, MaterialStep: 1, MaterialStepAt: at(22, 12, 0)}
+	got = todayText([]storage.Task{friday}, names, thu, true)
 	t.Log("\n" + got)
 	want := "📌 Публикаций сегодня нет.\n\n📎 <b>Материал на согласование</b> · запрос сегодня\n\n" +
-		"<b>пт 11:00</b> 🖼 Пост «осенние напитки»\n└ Вера · ⏳ ждём · напоминаний 2 из 3"
+		"<b>пт 11:00</b> 🖼 Пост «осенние напитки»\n└ Вера · ⏳ ждём · напомню через час после запроса"
 	if got != want {
 		t.Errorf("Thursday:\n%s\nwant\n%s", got, want)
 	}
@@ -98,7 +98,7 @@ func TestWeekText(t *testing.T) {
 			week = append(week, x)
 		}
 	}
-	got := weekText(week, names, sales, now, true)
+	got := weekText(week, names, sales, now, true, true, true)
 	t.Log("\n" + got)
 	for _, want := range []string{
 		"📊 <b>Неделя пн 19.10 – вс 25.10</b>\n<i>на сб 24.10, 12:30</i>",
@@ -120,7 +120,7 @@ func TestWeekText(t *testing.T) {
 	if len(got) > 4096 {
 		t.Errorf("week report is %d bytes, more than a Telegram message", len(got))
 	}
-	if empty := weekText(nil, nil, nil, now, true); !strings.Contains(empty, "Публикаций на этой неделе нет") ||
+	if empty := weekText(nil, nil, nil, now, true, true, true); !strings.Contains(empty, "Публикаций на этой неделе нет") ||
 		!strings.Contains(empty, "Опросов на этой неделе не было") {
 		t.Errorf("empty week:\n%s", empty)
 	}
@@ -138,5 +138,30 @@ func TestPublishDataFitsTelegram(t *testing.T) {
 	task := storage.Task{ID: "c8e6813f-5519-4bc4-8080-82388a0c4f20", PublishAt: at(26, 11, 0)}
 	if d := publishData(task, "y"); len(d) > 64 {
 		t.Errorf("callback data %q is %d bytes, Telegram allows 64", d, len(d))
+	}
+}
+
+// With "published?" and the sales poll off, a passed publication is just
+// past, answers given before stay, and there is no sales section.
+func TestWeekTextQuestionsOff(t *testing.T) {
+	tasks, names, _, now := sampleWeek()
+	got := weekText(tasks, names, nil, now, true, false, false)
+	for _, want := range []string{"ср 21.10 · 1 — 🕘 1", "📱 Сторис · 3 — ✅ 2 · ⚠️ 1"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in\n%s", want, got)
+		}
+	}
+	for _, unwanted := range []string{"🔕 не спрашивали", "— 🔕 1", "Отчёты продажников"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("unexpected %q in\n%s", unwanted, got)
+		}
+	}
+
+	past := storage.Task{Type: storage.TaskTelegram, Title: "x", PublishAt: now.Add(-time.Hour), Status: storage.PublishPending, Attempts: 1}
+	if s := publishStatusText(past, now, false); s != "🕘 время публикации прошло" {
+		t.Errorf("past task with questions off: %q", s)
+	}
+	if s := publishStatusText(past, now, true); !strings.HasPrefix(s, "⏳") {
+		t.Errorf("past task with questions on: %q", s)
 	}
 }

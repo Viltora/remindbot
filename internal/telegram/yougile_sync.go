@@ -14,11 +14,11 @@ import (
 )
 
 // Tasks are read from YouGile every 30 minutes by day; at night the bot does
-// not call YouGile. Quiet hours end at 09:00, so the 07:05 sync is in time
-// for the morning.
+// not call YouGile. Quiet hours end at 07:00, so the 06:05 and 06:35 syncs
+// are in time for the morning.
 const (
-	yougileSyncCron     = "5,35 7-22 * * *"
-	yougileSyncFromHour = 7
+	yougileSyncCron     = "5,35 6-22 * * *"
+	yougileSyncFromHour = 6
 	yougileSyncToHour   = 23
 	// The copy keeps tasks published within this window around now.
 	syncPast  = 24 * time.Hour

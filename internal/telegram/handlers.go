@@ -72,13 +72,15 @@ func (t *Bot) onToday(ctx context.Context, _ *bot.Bot, update *models.Update) {
 		tasks = "📌 Публикации загрузить не удалось."
 	}
 	text += "\n\n" + tasks
-	sales, err := t.salesTodayText(ctx)
-	if err != nil {
-		t.log.Error("sales today", "err", err)
-		sales = "💼 Отчёты продажников загрузить не удалось."
-	}
-	if sales != "" {
-		text += "\n\n" + sales
+	if t.features.SalesPoll {
+		sales, err := t.salesTodayText(ctx)
+		if err != nil {
+			t.log.Error("sales today", "err", err)
+			sales = "💼 Отчёты продажников загрузить не удалось."
+		}
+		if sales != "" {
+			text += "\n\n" + sales
+		}
 	}
 	t.reply(ctx, update.Message, text)
 }

@@ -13,19 +13,17 @@ import (
 	"remindbot/internal/storage"
 )
 
-// Weekly content plan reminders, in the content chats:
+// Weekly content plan reminder, in the content chats:
 //
-//	Monday 13:00  ask the team to fill in the plan
-//	Monday 18:00  tag the admins to review and approve it
-const (
-	planFillCron   = "0 13 * * 1"
-	planReviewCron = "0 18 * * 1"
-)
+//	Monday 13:00  ask the team to fill in the plan; the admin is not tagged
+const planFillCron = "0 13 * * 1"
 
 type planFillArgs struct{}
 
 func (planFillArgs) Kind() string { return "plan_fill" }
 
+// planReviewArgs was Monday 18:00 "admin, approve the plan". It is no longer
+// scheduled; the worker stays so a job left in the queue finishes quietly.
 type planReviewArgs struct{}
 
 func (planReviewArgs) Kind() string { return "plan_review" }
@@ -34,37 +32,15 @@ func (t *Bot) planJobs(workers *river.Workers) ([]*river.PeriodicJob, error) {
 	river.AddWorker(workers, river.WorkFunc(func(ctx context.Context, _ *river.Job[planFillArgs]) error {
 		return t.sendToGroups(ctx, "🗓 Напоминание: заполните, пожалуйста, контент-план на неделю в YouGile.")
 	}))
-	river.AddWorker(workers, river.WorkFunc(t.workPlanReview))
+	river.AddWorker(workers, river.WorkFunc(func(context.Context, *river.Job[planReviewArgs]) error { return nil }))
 
-	var jobs []*river.PeriodicJob
-	for _, p := range []struct {
-		cron string
-		args river.JobArgs
-	}{
-		{planFillCron, planFillArgs{}},
-		{planReviewCron, planReviewArgs{}},
-	} {
-		schedule, err := cron.ParseStandard("CRON_TZ=" + t.tz.String() + " " + p.cron)
-		if err != nil {
-			return nil, fmt.Errorf("%s schedule: %w", p.args.Kind(), err)
-		}
-		args := p.args
-		jobs = append(jobs, river.NewPeriodicJob(schedule,
-			func() (river.JobArgs, *river.InsertOpts) { return args, nil },
-			&river.PeriodicJobOpts{ID: args.Kind()}))
-	}
-	return jobs, nil
-}
-
-func (t *Bot) workPlanReview(ctx context.Context, _ *river.Job[planReviewArgs]) error {
-	who, err := t.adminToTag(ctx)
+	schedule, err := cron.ParseStandard("CRON_TZ=" + t.tz.String() + " " + planFillCron)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("plan_fill schedule: %w", err)
 	}
-	if who == "" {
-		who = "Руководитель"
-	}
-	return t.sendToGroups(ctx, "🗓 "+who+", проверь, пожалуйста, контент-план на неделю и утверди его.")
+	return []*river.PeriodicJob{river.NewPeriodicJob(schedule,
+		func() (river.JobArgs, *river.InsertOpts) { return planFillArgs{}, nil },
+		&river.PeriodicJobOpts{ID: "plan_fill"})}, nil
 }
 
 // adminToTag returns the mention of the admin the bot addresses: the primary

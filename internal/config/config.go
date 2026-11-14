@@ -32,6 +32,17 @@ type Config struct {
 	// LogFile, if set, gets a copy of the logs (appended).
 	LogFile string
 	DB      DB
+	// Features switch scenarios on; each is off unless set to true.
+	Features Features
+}
+
+// Features are the scenarios that can be switched off in .env. Reminders
+// about publications and the material requests are always on.
+type Features struct {
+	// SalesPoll is the evening sales report poll (FEATURE_SALES_POLL).
+	SalesPoll bool
+	// PublishQuestions is "published?" after a publication (FEATURE_PUBLISH_QUESTIONS).
+	PublishQuestions bool
 }
 
 // Redactor cuts the secrets out of text, e.g. log lines: the Telegram library
@@ -94,6 +105,15 @@ func Load() (Config, error) {
 		errs = append(errs, err)
 	}
 
+	for name, dst := range map[string]*bool{
+		"FEATURE_SALES_POLL":        &cfg.Features.SalesPoll,
+		"FEATURE_PUBLISH_QUESTIONS": &cfg.Features.PublishQuestions,
+	} {
+		if *dst, err = flag(name); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
 	tz := env("BOT_TIMEZONE", "Europe/Moscow")
 	if cfg.Timezone, err = time.LoadLocation(tz); err != nil {
 		errs = append(errs, fmt.Errorf("BOT_TIMEZONE: неизвестный часовой пояс %q", tz))
@@ -138,6 +158,19 @@ func tgIDList(name string) ([]int64, error) {
 		}
 	}
 	return ids, nil
+}
+
+// flag reads an on/off setting; an unset variable gives off.
+func flag(name string) (bool, error) {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return false, nil
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s: ожидается true или false, получено %q", name, raw)
+	}
+	return v, nil
 }
 
 func env(name, def string) string {

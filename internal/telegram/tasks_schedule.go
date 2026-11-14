@@ -14,8 +14,7 @@ import (
 //	P−24h       request; if that is a weekend, on Friday at the same time.
 //	            The material is due a day ahead, so a request later than
 //	            materialRequestGrace is not sent at all.
-//	+30m × 3    reminders while there is no material
-//	+30m        the primary admin is told
+//	+1h         one reminder if there is no material; the admin is not told
 //	            nothing is sent from P on
 //
 // Publishing (all types):
@@ -25,10 +24,11 @@ import (
 //	+30m          "no answer" is recorded, no message
 const (
 	materialLead      = 24 * time.Hour
-	materialReminders = 3
-	// The material step that tells the admin, after the request and reminders.
-	materialAdminStep = materialReminders + 2
-	taskStep          = 30 * time.Minute
+	materialReminders = 1
+	materialGap       = time.Hour
+	// The last material step: the request is step 1, the reminders follow.
+	materialLastStep = materialReminders + 1
+	taskStep         = 30 * time.Minute
 	// How late a material request may still go: the sync runs every 30
 	// minutes, so a task added just before its request time is seen this late.
 	materialRequestGrace = 30 * time.Minute
@@ -65,19 +65,19 @@ func toFriday(t time.Time) time.Time {
 }
 
 // materialDue returns the material step due at now, if any: 1 request,
-// 2–4 reminders, materialAdminStep telling the admin. Times are taken in
+// then the reminders up to materialLastStep. Times are taken in
 // now's location, the bot's time zone.
 func materialDue(task storage.Task, now time.Time) (step int, due bool) {
 	p := task.PublishAt.In(now.Location())
 	if !task.Type.NeedsMaterial() || !task.MaterialReceivedAt.IsZero() ||
-		task.MaterialStep >= materialAdminStep || !now.Before(p) {
+		task.MaterialStep >= materialLastStep || !now.Before(p) {
 		return 0, false
 	}
 	if task.MaterialStep == 0 {
 		at := materialRequestTime(p)
 		return 1, !now.Before(at) && now.Sub(at) <= materialRequestGrace
 	}
-	at := outsideQuietHours(task.MaterialStepAt.In(now.Location()).Truncate(time.Minute).Add(taskStep))
+	at := outsideQuietHours(task.MaterialStepAt.In(now.Location()).Truncate(time.Minute).Add(materialGap))
 	return task.MaterialStep + 1, !now.Before(at)
 }
 

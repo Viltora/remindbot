@@ -44,7 +44,9 @@ func run() error {
 	log.Info("starting remindbot", "version", version.Version,
 		"timezone", cfg.Timezone.String(), "superadmin", cfg.SuperadminID,
 		"test_recipients", cfg.TestRecipientIDs, "yougile", cfg.YouGileAPIKey != "",
-		"log_level", cfg.LogLevel.String(), "log_file", cfg.LogFile)
+		"log_level", cfg.LogLevel.String(), "log_file", cfg.LogFile,
+		"sales_poll", cfg.Features.SalesPoll,
+		"publish_questions", cfg.Features.PublishQuestions)
 	if cfg.SuperadminID == 0 {
 		log.Warn("SUPERADMIN_TG_ID is not set: send /whoami to the bot and put your ID into .env")
 	}

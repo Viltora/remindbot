@@ -36,6 +36,31 @@ const (
 	salesLatestStartHour = 21
 )
 
+// Sales report reminder: Mon, Wed, Fri at 16:00 every sales user is asked to
+// fill in the report. One message, no buttons, no follow-up questions. It is
+// always on; the evening poll above is FEATURE_SALES_POLL.
+const salesRemindCron = "0 16 * * 1,3,5"
+
+type salesRemindArgs struct{}
+
+func (salesRemindArgs) Kind() string { return "sales_remind" }
+
+func (t *Bot) workSalesRemind(ctx context.Context, _ *river.Job[salesRemindArgs]) error {
+	users, err := t.salesUsers(ctx)
+	if err != nil {
+		return err
+	}
+	out, err := t.salesOutput(ctx)
+	if err != nil {
+		return err
+	}
+	for _, u := range users {
+		out.send(ctx, u, "пора заполнить отчёт — пришли его "+out.sendTo+".", nil)
+	}
+	t.log.Info("sales reminder", "users", len(users), "in_chat", len(out.chats) > 0)
+	return nil
+}
+
 // Callback data: "sr:<date>:<owner tg_id>:y|n".
 const cbSalesPrefix = "sr:"
 
@@ -55,12 +80,28 @@ func (salesStepArgs) Kind() string { return "sales_step" }
 func (t *Bot) salesJobs(workers *river.Workers) ([]*river.PeriodicJob, error) {
 	river.AddWorker(workers, river.WorkFunc(t.workSalesDay))
 	river.AddWorker(workers, river.WorkFunc(t.workSalesStep))
+	river.AddWorker(workers, river.WorkFunc(t.workSalesRemind))
+
+	remindSchedule, err := cron.ParseStandard("CRON_TZ=" + t.tz.String() + " " + salesRemindCron)
+	if err != nil {
+		return nil, fmt.Errorf("sales reminder schedule: %w", err)
+	}
+	// Not RunOnStart: a reminder missed while the bot was down is not sent late.
+	remind := river.NewPeriodicJob(remindSchedule,
+		func() (river.JobArgs, *river.InsertOpts) { return salesRemindArgs{}, nil },
+		&river.PeriodicJobOpts{ID: "sales_remind"})
 
 	schedule, err := cron.ParseStandard("CRON_TZ=" + t.tz.String() + " " + salesCron)
 	if err != nil {
 		return nil, fmt.Errorf("sales schedule: %w", err)
 	}
-	return []*river.PeriodicJob{
+	// Workers stay registered when the poll is off: jobs already queued then
+	// run and do nothing instead of failing.
+	if !t.features.SalesPoll {
+		t.log.Info("sales poll is off (FEATURE_SALES_POLL)")
+		return []*river.PeriodicJob{remind}, nil
+	}
+	return []*river.PeriodicJob{remind,
 		river.NewPeriodicJob(schedule,
 			func() (river.JobArgs, *river.InsertOpts) { return salesDayArgs{}, nil },
 			// RunOnStart catches up if the bot was down at 18:00.
@@ -69,6 +110,9 @@ func (t *Bot) salesJobs(workers *river.Workers) ([]*river.PeriodicJob, error) {
 }
 
 func (t *Bot) workSalesDay(ctx context.Context, _ *river.Job[salesDayArgs]) error {
+	if !t.features.SalesPoll {
+		return nil
+	}
 	now := time.Now().In(t.tz)
 	if !salesWorkday(now) || now.Hour() < 18 || now.Hour() >= salesLatestStartHour {
 		return nil
@@ -103,6 +147,10 @@ func (t *Bot) workSalesDay(ctx context.Context, _ *river.Job[salesDayArgs]) erro
 
 func (t *Bot) workSalesStep(ctx context.Context, job *river.Job[salesStepArgs]) error {
 	args := job.Args
+	if !t.features.SalesPoll {
+		t.log.Info("sales step skipped: the poll is off", "date", args.Date, "step", args.Step)
+		return nil
+	}
 	if args.Step > salesAttempts {
 		return t.closeSalesDay(ctx, args.Date)
 	}
