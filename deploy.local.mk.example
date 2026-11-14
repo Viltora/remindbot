@@ -1,0 +1,2 @@
+# Скопируй в deploy.local.mk (он в .gitignore) и впиши адрес сервера.
+SERVER = root@<адрес-сервера>

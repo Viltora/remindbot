@@ -1,0 +1,265 @@
+<!doctype html>
+<!-- Source of bot-flow.pdf. Rebuild: make docs-pdf -->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>remindbot — блок-схемы</title>
+<style>
+  @page { size: A4 portrait; margin: 10mm 12mm; }
+  @page wide { size: A4 landscape; margin: 10mm 12mm; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: #1f2328; background: #fff;
+    font: 12px/1.45 -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+  section {
+    page-break-after: always; break-after: page; overflow: hidden;
+    width: 186mm; height: 272mm; display: flex; flex-direction: column;
+  }
+  section.wide { page: wide; width: 273mm; height: 186mm; }
+  section:last-of-type { page-break-after: auto; break-after: auto; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  h2 { font-size: 17px; margin: 0 0 2px; }
+  .sub { color: #59636e; margin: 0 0 8px; }
+  .legend { display: flex; gap: 16px; color: #59636e; font-size: 11px; margin-bottom: 6px; }
+  .sw { display: inline-block; width: 14px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+  .diagram { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+  .grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 2fr 3fr; gap: 6mm; }
+  .grid .diagram { border: 1px solid #eaeef2; border-radius: 6px; }
+  .grid .diagram.tall { grid-row: span 2; }
+  .note { color: #59636e; font-size: 11px; margin-top: 4px; }
+  .overview { flex: 1; display: grid; grid-template-columns: 1fr 34px 1.25fr 34px 0.9fr; align-items: center; gap: 4mm; }
+  .col { display: flex; flex-direction: column; gap: 7px; }
+  .col.bot { background: #f6f8fa; border: 1px solid #d1d9e0; border-radius: 8px; padding: 10px; }
+  .col-h { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+  .sub-h { color: #59636e; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
+  .card { border: 1px solid; border-radius: 6px; padding: 7px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .card span { color: #59636e; font-size: 11px; }
+  .card.who { background: #ddf4ff; border-color: #0969da; }
+  .card.done { background: #dafbe1; border-color: #1a7f37; }
+  .card.plan { background: #fff; border: 1px dashed #8c959f; }
+  .card.store { background: #fff8c5; border-color: #9a6700; }
+  .card.plan-border { border-style: dashed; }
+  .arrow { text-align: center; font-size: 22px; color: #59636e; display: flex; flex-direction: column; align-items: center; }
+  .arrow small { font-size: 9px; line-height: 1.2; }
+  pre.mermaid { visibility: hidden; margin: 0; }
+  pre.mermaid[data-processed] { visibility: visible; }
+</style>
+</head>
+<body>
+
+<section class="wide">
+  <h1>remindbot — общий обзор</h1>
+  <p class="sub">Приватный Telegram-бот SMM-команды: напоминает, собирает подтверждения, присылает отчёты.</p>
+  <div class="legend">
+    <span><span class="sw" style="background:#dafbe1;border:1px solid #1a7f37"></span>работает</span>
+    <span><span class="sw" style="background:#f6f8fa;border:1px dashed #8c959f"></span>запланировано</span>
+  </div>
+  <div class="overview">
+    <div class="col">
+      <div class="col-h">Кто</div>
+      <div class="card who"><b>👑 Суперадмин — Иван</b><span>назначает роли · /admins · /status</span></div>
+      <div class="card who"><b>🛡 Админ 📌 — Оля</b><span>/today /week /month · итоги · её одну тегает бот</span></div>
+      <div class="card who"><b>💼 sales — продажники</b><span>ежедневный опрос: отправил ли отчёт</span></div>
+      <div class="card who"><b>👥 Команда в групповом чате</b><span>напоминания с тегами по @нику</span></div>
+    </div>
+    <div class="arrow">⇄<small>команды,<br>кнопки,<br>сообщения</small></div>
+    <div class="col bot">
+      <div class="col-h">🤖 remindbot</div>
+      <div class="sub-h">работает</div>
+      <div class="card done"><b>Роли и доступ</b><span>приватный бот · меню по роли · уведомление о новых людях</span></div>
+      <div class="card done"><b>Отчёт продажников</b><span>пн–пт, в чат продаж: 18:00 → 18:20, 18:40 → итог 20:40</span></div>
+      <div class="card done"><b>Контент-план</b><span>в чат контента: пн 13:00 «заполните» · 18:00 «@nastya, утверди»</span></div>
+      <div class="card done"><b>Групповые чаты</b><span>📝 контент / 💼 продажи · чужие добавления — бот выходит</span></div>
+      <div class="card done"><b>Тихие часы</b><span>22:00–09:00 → перенос на 09:00</span></div>
+      <div class="sub-h">запланировано</div>
+      <div class="card plan"><b>Задачи из YouGile</b><span>материалы за сутки · напоминания · «выложено?»</span></div>
+      <div class="card plan"><b>Отчёты</b><span>неделя пн–вс (вс 21:00) · месяц — файл Excel</span></div>
+    </div>
+    <div class="arrow">⇄</div>
+    <div class="col">
+      <div class="col-h">Данные</div>
+      <div class="card store"><b>PostgreSQL</b><span>пользователи, роли, чаты, ответы</span></div>
+      <div class="card store"><b>River</b><span>расписание в той же базе — переживает перезапуск</span></div>
+      <div class="card store plan-border"><b>YouGile</b><span>контент-план: тип, время, ответственный</span></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>1. Доступ и роли ✅</h2>
+  <p class="sub">Назначить роль можно только тому, кто сам написал боту /start — Telegram не даёт ботам писать первыми.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  classDef act fill:#ddf4ff,stroke:#0969da,color:#1f2328
+  classDef msg fill:#ffffff,stroke:#8c959f,color:#1f2328
+  classDef res fill:#dafbe1,stroke:#1a7f37,color:#1f2328
+  classDef warn fill:#fff1e5,stroke:#bc4c00,color:#1f2328
+
+  A(["Человек пишет боту<br/>/start"]):::act --> B{"Роль?"}
+  B -->|"суперадмин / админ"| C["Приветствие<br/>+ личное меню команд"]:::res
+  B -->|"sales / без роли"| D["«Это приватный бот команды…»"]:::msg
+  D --> E{"Пишет<br/>впервые?"}
+  E -->|да| F["Суперадмину:<br/>👤 Боту написал новый человек<br/>[⭐ Сделать админом] [💼 Сделать sales]"]:::warn
+  E -->|нет| X(["ничего"]):::msg
+  F --> G{"Суперадмин<br/>нажал"}
+  G -->|"⭐ Админ"| H["Роль admin<br/>первый админ → 📌 основной"]:::res
+  G -->|"💼 Sales"| I["Роль sales"]:::res
+  H --> J["Человеку: «Тебя назначили админом»<br/>меню: /today /week /month"]:::msg
+  I --> K["Человеку: «Тебе назначена роль sales,<br/>по будням в 18:00 напомню про отчёт»"]:::msg
+
+  L(["/admins"]):::act --> M["Списки: админы 📌, sales, кандидаты<br/>[📌 Основной] [❌ Снять] [⭐ Админ] [💼 Sales]"]:::msg
+  M --> G
+  N(["Команда без нужной роли"]):::act --> O["«Нет доступа.»<br/>меню у человека убирается"]:::warn
+  </pre></div>
+</section>
+
+<section>
+  <h2>2. Отчёт продажников ✅</h2>
+  <p class="sub">Пн–Пт. Отчёт продажник шлёт руководителю в личку — бот его не видит и верит кнопкам. Тег — максимум 3 раза в день.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  classDef time fill:#ddf4ff,stroke:#0969da,color:#1f2328
+  classDef msg fill:#ffffff,stroke:#8c959f,color:#1f2328
+  classDef ok fill:#dafbe1,stroke:#1a7f37,color:#1f2328
+  classDef bad fill:#ffebe9,stroke:#cf222e,color:#1f2328
+  classDef warn fill:#fff1e5,stroke:#bc4c00,color:#1f2328
+
+  S(["18:00 пн–пт<br/>или сразу после запуска,<br/>если бот был выключен<br/>(не позже 21:00)"]):::time
+  S --> A["Каждому sales —<br/>в чат продаж с тегом<br/>(нет чата — в личку):<br/>«@ivan, пора отправить отчёт —<br/>пришли руководителю в личку»"]:::msg
+  A --> Q1["18:20 «@ivan, отчёт отправил?»<br/>[✅ Да] [❌ Нет] — жмёт только он<br/>попытка 1 из 2"]:::msg
+  Q1 --> R1{"Ответ"}
+  R1 -->|Да| OK["✅ отправил<br/>· с N-й попытки"]:::ok
+  R1 -->|Нет| NO["❌ пока не отправил<br/>остаётся [✅ Отправил]"]:::bad
+  R1 -->|молчит| Q2
+  NO --> Q2["18:40 тот же вопрос<br/>попытка 2 из 2<br/>«время есть до 20:40»"]:::msg
+  Q2 --> R2{"Ответ<br/>до 20:40"}
+  R2 -->|"Да / Отправил"| OK
+  R2 -->|Нет| NOF["❌ не отправил"]:::bad
+  R2 -->|молчит| NA["⚠️ нет ответа"]:::warn
+  OK --> CL
+  NOF --> CL
+  NA --> CL
+  CL["20:40 день закрыт<br/>поздние нажатия:<br/>«время вышло»"]:::time --> SUM["Итог всем админам в личку<br/>проблемы сверху"]:::msg
+  </pre></div>
+  <p class="note">Тихие часы: если шаг выпадает на 22:00–09:00, он переносится на 09:00. Статусы в реальном времени — в /today у админов.</p>
+</section>
+
+<section>
+  <h2>3. Контент-план, тихие часы, групповые чаты ✅</h2>
+  <p class="sub">Сообщения о плане — в 📝 чат контента; тегается только основной админ 📌. Чатам назначение даёт суперадмин (/chats).</p>
+  <div class="grid">
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  classDef time fill:#ddf4ff,stroke:#0969da,color:#1f2328
+  classDef msg fill:#ffffff,stroke:#8c959f,color:#1f2328
+  classDef ok fill:#dafbe1,stroke:#1a7f37,color:#1f2328
+  classDef store fill:#fff8c5,stroke:#9a6700,color:#1f2328
+  M13(["Пн 13:00"]):::time --> G1["В чат контента:<br/>«Заполните контент-план<br/>на неделю в YouGile»"]:::msg
+  M18(["Пн 18:00"]):::time --> G2["В чат контента:<br/>«@nastya, проверь<br/>и утверди план»"]:::msg
+  </pre></div>
+  <div class="diagram tall"><pre class="mermaid">
+flowchart TD
+  classDef time fill:#ddf4ff,stroke:#0969da,color:#1f2328
+  classDef msg fill:#ffffff,stroke:#8c959f,color:#1f2328
+  classDef ok fill:#dafbe1,stroke:#1a7f37,color:#1f2328
+  classDef store fill:#fff8c5,stroke:#9a6700,color:#1f2328
+  U(["Событие в группе"]):::time --> K{"Что<br/>произошло"}
+  K -->|"бота добавили /<br/>удалили"| C[("chats:<br/>бот в чате да/нет")]:::store
+  K -->|"команда, ответ боту,<br/>кнопка, вход"| MM[("chat_members:<br/>в чате")]:::store
+  K -->|"вышел"| LL[("chat_members:<br/>вышел")]:::store
+  C --> ST["/status: групповые чаты<br/>по назначению, сколько<br/>людей замечено"]:::msg
+  MM --> ST
+  LL --> ST
+  </pre></div>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  classDef time fill:#ddf4ff,stroke:#0969da,color:#1f2328
+  classDef msg fill:#ffffff,stroke:#8c959f,color:#1f2328
+  classDef ok fill:#dafbe1,stroke:#1a7f37,color:#1f2328
+  classDef store fill:#fff8c5,stroke:#9a6700,color:#1f2328
+  T{"Отправка по<br/>расписанию на<br/>22:00–09:00?"} -->|нет| N["Отправить в срок"]:::ok
+  T -->|да| PP["Перенести на 09:00"]:::time
+  </pre></div>
+  </div>
+</section>
+
+<section>
+  <h2>4. Публикации и материалы 🕓 запланировано</h2>
+  <p class="sub">Заработает после подключения YouGile. Всё — в общем чате, с тегами по @нику; тихие часы соблюдаются.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  classDef time fill:#ddf4ff,stroke:#0969da,color:#1f2328
+  classDef msg fill:#ffffff,stroke:#8c959f,color:#1f2328
+  classDef ok fill:#dafbe1,stroke:#1a7f37,color:#1f2328
+  classDef bad fill:#ffebe9,stroke:#cf222e,color:#1f2328
+  classDef warn fill:#fff1e5,stroke:#bc4c00,color:#1f2328
+  classDef store fill:#fff8c5,stroke:#9a6700,color:#1f2328
+
+  Y[("YouGile")]:::store -->|"ежедневно<br/>+ вебхуки"| T["Задача:<br/>тип, время T,<br/>ответственный"]:::msg
+  T --> TY{"Пост<br/>или рилс?"}
+  TY -->|да| M0["T−24ч: «@masha, пришли<br/>готовый материал<br/>ОТВЕТОМ на это сообщение»<br/>💡 Не забудь про сторис<br/>и обложку"]:::msg
+  M0 --> MR{"Ответ<br/>с материалом?"}
+  MR -->|да| MOK["✅ материал получен"]:::ok
+  MR -->|нет| MREM["3 напоминания<br/>каждые 30 мин"]:::msg
+  MREM --> MR2{"Прислал?"}
+  MR2 -->|да| MOK
+  MR2 -->|нет| ESC["T−22:00<br/>⚠️ @nastya, @masha<br/>не прислала материал"]:::warn
+  TY -->|"сторис,<br/>телеграм"| P1
+  MOK --> P1
+  ESC --> P1
+  P1["T−60, T−30<br/>🔔 @masha, в 15:00<br/>выложить пост"]:::time --> P2["T+30 ❓ Выложено?<br/>[✅ Да] [❌ Нет]"]:::msg
+  P2 --> P3{"Ответ"}
+  P3 -->|Да| D["✅ выложено<br/>· с N-й попытки"]:::ok
+  P3 -->|Нет| DN["❌ не выложено"]:::bad
+  P3 -->|молчит| P4["до 3 повторов<br/>каждые 30 мин"]:::msg
+  P4 -->|"нет ответа"| NA["⚠️ нет ответа"]:::warn
+  P4 -->|ответил| P3
+  </pre></div>
+</section>
+
+<section>
+  <h2>5. Отчёты</h2>
+  <p class="sub">Неделя — пн–вс. Люди в отчётах — по @нику.</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart TD
+  classDef done fill:#dafbe1,stroke:#1a7f37,color:#1f2328
+  classDef plan fill:#f6f8fa,stroke:#8c959f,stroke-dasharray:5 4,color:#59636e
+  classDef store fill:#fff8c5,stroke:#9a6700,color:#1f2328
+  classDef who fill:#ddf4ff,stroke:#0969da,color:#1f2328
+
+  DB[("База бота")]:::store
+  DB --> S1["20:40 пн–пт<br/>итог продажников ✅"]:::done
+  DB --> S2["/today ✅ продажники<br/>🕓 публикации:<br/>✅ с N-й попытки · ⏳ попытка N из 4<br/>🕓 ещё не время · ⚠️ нет ответа"]:::done
+  DB --> S3["/week + автоотчёт<br/>вс 21:00 🕓<br/>всего · по людям · проблемы"]:::plan
+  DB --> S4["/month 🕓 файл Excel:<br/>Сводка · По людям<br/>(с 1-й…4-й попытки)<br/>· Все задачи"]:::plan
+  S1 --> A["🛡 Админы<br/>(Оля)"]:::who
+  S2 --> A
+  S3 --> A
+  S4 --> A
+  </pre></div>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: "base",
+    themeVariables: { fontFamily: '-apple-system, "Helvetica Neue", Arial, sans-serif', fontSize: "14px", lineColor: "#59636e" },
+    flowchart: { htmlLabels: true, curve: "basis", nodeSpacing: 28, rankSpacing: 38, useMaxWidth: true },
+  });
+  function fit() {
+    document.querySelectorAll(".diagram").forEach((box) => {
+      const svg = box.querySelector("svg");
+      if (!svg) return;
+      const vb = svg.viewBox.baseVal;
+      const scale = Math.min((box.clientWidth - 8) / vb.width, (box.clientHeight - 8) / vb.height, 1.8);
+      svg.style.maxWidth = "none";
+      svg.setAttribute("width", vb.width * scale);
+      svg.setAttribute("height", vb.height * scale);
+    });
+  }
+  mermaid.run().then(() => { fit(); document.title = "ready"; });
+</script>
+</body>
+</html>

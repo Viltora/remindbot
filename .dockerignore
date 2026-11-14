@@ -1,0 +1,12 @@
+# В образ — только то, что нужно для сборки. Секреты и .env подключаются при запуске.
+.env
+secrets/
+backups/
+logs/
+bin/
+docs/
+.git/
+.idea/
+.DS_Store
+deploy.local.mk
+PRIVATE.md
