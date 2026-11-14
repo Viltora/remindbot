@@ -21,8 +21,11 @@ const (
 )
 
 var purposeLabels = map[storage.ChatPurpose]string{
-	storage.PurposeContent: "📝 Контент",
-	storage.PurposeSales:   "💼 Продажи",
+	storage.PurposeMaterial: "📎 Материалы",
+	storage.PurposePublish:  "🔔 Выкладка",
+	storage.PurposeSales:    "💼 Продажи",
+	// The old single content chat: still works, gets both; not offered anew.
+	storage.PurposeContent: "📝 Контент (материалы + выкладка)",
 	storage.PurposeNone:    "— не назначено",
 }
 
@@ -81,14 +84,18 @@ func (t *Bot) chatsScreen(ctx context.Context) (string, models.ReplyMarkup, erro
 		rows = append(rows, []models.InlineKeyboardButton{{Text: "«" + c.Title + "»:", CallbackData: "noop"}})
 		rows = append(rows, purposeButtons(c.ID).InlineKeyboard...)
 	}
-	sb.WriteString("\n\n📝 Контент — контент-план и публикации.\n💼 Продажи — опрос продажников (без чата — в личку).")
+	sb.WriteString("\n\n📎 Материалы — «пришли материал» за сутки и напоминание через час." +
+		"\n🔔 Выкладка — напоминания о публикации и контент-план по понедельникам." +
+		"\n💼 Продажи — напоминание заполнить отчёт (без чата — в личку).")
 	return sb.String(), &models.InlineKeyboardMarkup{InlineKeyboard: rows}, nil
 }
 
 func purposeButtons(chatID int64) *models.InlineKeyboardMarkup {
 	data := func(p string) string { return fmt.Sprintf("%s%d:%s", cbChatPrefix, chatID, p) }
 	return &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{
-		{Text: purposeLabels[storage.PurposeContent], CallbackData: data(string(storage.PurposeContent))},
+		{Text: purposeLabels[storage.PurposeMaterial], CallbackData: data(string(storage.PurposeMaterial))},
+		{Text: purposeLabels[storage.PurposePublish], CallbackData: data(string(storage.PurposePublish))},
+	}, {
 		{Text: purposeLabels[storage.PurposeSales], CallbackData: data(string(storage.PurposeSales))},
 		{Text: "Без назначения", CallbackData: data(cbChatNone)},
 	}}}

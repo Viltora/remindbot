@@ -52,9 +52,13 @@ func (s *Store) SetChatMember(ctx context.Context, chatID int64, u User, present
 type ChatPurpose string
 
 const (
-	PurposeNone    ChatPurpose = ""
-	PurposeContent ChatPurpose = "content"
-	PurposeSales   ChatPurpose = "sales"
+	PurposeNone ChatPurpose = ""
+	// PurposeContent is the old single content chat: it gets what goes to
+	// both PurposeMaterial and PurposePublish.
+	PurposeContent  ChatPurpose = "content"
+	PurposeSales    ChatPurpose = "sales"
+	PurposeMaterial ChatPurpose = "material" // requests for material for approval
+	PurposePublish  ChatPurpose = "publish"  // publishing reminders, content plan
 )
 
 type Chat struct {
@@ -78,10 +82,14 @@ func (s *Store) ListChats(ctx context.Context) ([]Chat, error) {
 	})
 }
 
-// ChatsFor returns the active group chats with the given purpose.
-func (s *Store) ChatsFor(ctx context.Context, purpose ChatPurpose) ([]int64, error) {
+// ChatsFor returns the active group chats with any of the given purposes.
+func (s *Store) ChatsFor(ctx context.Context, purposes ...ChatPurpose) ([]int64, error) {
+	names := make([]string, len(purposes))
+	for i, p := range purposes {
+		names[i] = string(p)
+	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT chat_id FROM chats WHERE active AND purpose = $1 ORDER BY created_at`, purpose)
+		SELECT chat_id FROM chats WHERE active AND purpose = ANY($1) ORDER BY created_at`, names)
 	if err != nil {
 		return nil, err
 	}
@@ -102,14 +110,17 @@ func (s *Store) SetChatPurpose(ctx context.Context, chatID int64, purpose ChatPu
 }
 
 type Stats struct {
-	Users        int // everyone the bot knows, the superadmin included
-	Admins       int
-	Sales        int
-	Regular      int // no role: neither superadmin, admin nor sales
-	InGroups     int // seen in a group chat where the bot is now
-	ActiveChats  int
-	ContentChats int
-	SalesChats   int
+	Users       int // everyone the bot knows, the superadmin included
+	Admins      int
+	Sales       int
+	Regular     int // no role: neither superadmin, admin nor sales
+	InGroups    int // seen in a group chat where the bot is now
+	ActiveChats int
+	// MaterialChats and PublishChats count the old all-content chats too.
+	MaterialChats int
+	PublishChats  int
+	SalesChats    int
+	Unassigned    int
 }
 
 func (s *Store) Stats(ctx context.Context, superadminID int64) (Stats, error) {
@@ -124,10 +135,12 @@ func (s *Store) Stats(ctx context.Context, superadminID int64) (Stats, error) {
 		       FROM chat_members m JOIN chats c USING (chat_id)
 		      WHERE m.present AND c.active),
 		    (SELECT count(*) FROM chats WHERE active),
-		    (SELECT count(*) FROM chats WHERE active AND purpose = 'content'),
-		    (SELECT count(*) FROM chats WHERE active AND purpose = 'sales')`,
+		    (SELECT count(*) FROM chats WHERE active AND purpose IN ('material', 'content')),
+		    (SELECT count(*) FROM chats WHERE active AND purpose IN ('publish', 'content')),
+		    (SELECT count(*) FROM chats WHERE active AND purpose = 'sales'),
+		    (SELECT count(*) FROM chats WHERE active AND purpose IS NULL)`,
 		superadminID).
 		Scan(&st.Users, &st.Admins, &st.Sales, &st.Regular, &st.InGroups,
-			&st.ActiveChats, &st.ContentChats, &st.SalesChats)
+			&st.ActiveChats, &st.MaterialChats, &st.PublishChats, &st.SalesChats, &st.Unassigned)
 	return st, err
 }

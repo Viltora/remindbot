@@ -71,13 +71,15 @@ func (t *Bot) notify(ctx context.Context, chatID int64, html string, markup mode
 	return sent
 }
 
-// contentChats returns where content notifications go: the content chats, or
-// in test mode the test recipients' DMs.
-func (t *Bot) contentChats(ctx context.Context) ([]int64, error) {
+// contentChats returns where content notifications of one kind go
+// (storage.PurposeMaterial or storage.PurposePublish): the chats with that
+// purpose and the old all-content chats, or in test mode the test
+// recipients' DMs.
+func (t *Bot) contentChats(ctx context.Context, purpose storage.ChatPurpose) ([]int64, error) {
 	if t.testMode() {
 		return t.testRecipients, nil
 	}
-	return t.store.ChatsFor(ctx, storage.PurposeContent)
+	return t.store.ChatsFor(ctx, purpose, storage.PurposeContent)
 }
 
 // salesUsers returns who is asked for the daily report: the sales users, or

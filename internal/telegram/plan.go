@@ -67,12 +67,12 @@ func (t *Bot) adminToTag(ctx context.Context) (string, error) {
 // sendToGroups posts an HTML message to every content chat, or in test mode
 // to the test recipient.
 func (t *Bot) sendToGroups(ctx context.Context, text string) error {
-	chats, err := t.contentChats(ctx)
+	chats, err := t.contentChats(ctx, storage.PurposePublish)
 	if err != nil {
 		return err
 	}
 	if len(chats) == 0 {
-		t.log.Warn("no content chats to send to; assign one in /chats", "text", preview(text))
+		t.log.Warn("no publishing chats to send to; assign one in /chats", "text", preview(text))
 	}
 	t.log.Info("content chats message", "chats", len(chats), "text", preview(text))
 	for _, id := range chats {

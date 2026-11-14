@@ -99,7 +99,7 @@ func (t *Bot) sendMaterialStep(ctx context.Context, task storage.Task, step int)
 	if err != nil {
 		return err
 	}
-	chats, err := t.contentChats(ctx)
+	chats, err := t.contentChats(ctx, storage.PurposeMaterial)
 	if err != nil {
 		return err
 	}
@@ -160,7 +160,7 @@ func (t *Bot) sendPublishStep(ctx context.Context, task storage.Task, act publis
 	if err != nil {
 		return err
 	}
-	chats, err := t.contentChats(ctx)
+	chats, err := t.contentChats(ctx, storage.PurposePublish)
 	if err != nil {
 		return err
 	}
@@ -241,7 +241,7 @@ func (t *Bot) forgetOldSkips(now time.Time) {
 // delivered; with no chats at all there is nothing to retry, so that counts.
 func (t *Bot) sendAboutTask(ctx context.Context, chats []int64, task storage.Task, kind, text string, markup models.ReplyMarkup) (delivered bool) {
 	if len(chats) == 0 {
-		t.log.Warn("no content chats to send to; assign one in /chats", "task", task.ID, "text", preview(text))
+		t.log.Warn("no chats to send to; assign one in /chats", "task", task.ID, "text", preview(text))
 		return true
 	}
 	for _, chatID := range chats {

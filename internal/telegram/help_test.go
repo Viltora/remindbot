@@ -14,7 +14,7 @@ func TestHelpText(t *testing.T) {
 			t.Errorf("all off: unexpected %q", unwanted)
 		}
 	}
-	for _, want := range []string{"🔔 за 60 и 30 мин.", "<b>Выключено</b>", "пришли материал", "пн, ср, пт 16:00", "пн 13:00", "Через час одно напоминание"} {
+	for _, want := range []string{"за 60 и 30 мин.", "<b>Выключено</b>", "пришли материал", "пн, ср, пт 16:00", "пн 13:00", "Через час одно напоминание"} {
 		if !strings.Contains(off, want) {
 			t.Errorf("all off: no %q", want)
 		}
