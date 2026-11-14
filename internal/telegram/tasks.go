@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -306,14 +307,17 @@ func joinNames(ids []string, names map[string]string) string {
 }
 
 // personName is a YouGile name fit to show the team: YouGile puts the e-mail
-// in the name when none is set, and an e-mail is not shown.
+// in the name when none is set, and an e-mail is not shown. Other names,
+// "@" or not, stay.
 func personName(name string) string {
 	name = strings.TrimSpace(name)
-	if strings.Contains(name, "@") {
+	if emailLike.MatchString(name) {
 		return ""
 	}
 	return name
 }
+
+var emailLike = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
 func publishButtons(task storage.Task) models.ReplyMarkup {
 	return &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{

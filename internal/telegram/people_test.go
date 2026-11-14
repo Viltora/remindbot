@@ -52,3 +52,18 @@ func TestGreetingForEveryPurpose(t *testing.T) {
 		}
 	}
 }
+
+func TestPersonNameHidesOnlyEmails(t *testing.T) {
+	for in, want := range map[string]string{
+		"Катя":                "Катя",
+		" Аня @smm ":            "Аня @smm",
+		"Ivan @ Design":         "Ivan @ Design",
+		"someone@example.com":   "",
+		"a.b-c@mail.example.ru": "",
+		"":                      "",
+	} {
+		if got := personName(in); got != want {
+			t.Errorf("personName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -93,18 +93,31 @@ func (s *Store) LinkYouGile(ctx context.Context, tgID int64, ygID string) error 
 }
 
 // ListPeople returns everyone the bot knows: who wrote /start or was seen in
-// a group, the superadmin first, then admins, sales and the rest.
-func (s *Store) ListPeople(ctx context.Context, limit int) ([]User, error) {
+// a group, the superadmin (set in the config, not stored as a role) first,
+// then admins, sales and the rest.
+func (s *Store) ListPeople(ctx context.Context, superadminID int64, limit int) ([]User, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT tg_id, COALESCE(username, ''), first_name, role
 		FROM users
-		ORDER BY CASE role WHEN 'superadmin' THEN 0 WHEN 'admin' THEN 1 WHEN 'sales' THEN 2 ELSE 3 END,
+		ORDER BY tg_id = $1 DESC,
+		         CASE role WHEN 'admin' THEN 1 WHEN 'sales' THEN 2 ELSE 3 END,
 		         started_at IS NULL, lower(COALESCE(NULLIF(username, ''), first_name))
-		LIMIT $1`, limit)
+		LIMIT $2`, superadminID, limit)
 	if err != nil {
 		return nil, err
 	}
 	return pgx.CollectRows(rows, scanUser)
+}
+
+// HasStarted reports whether the user has pressed Start in a private chat
+// with the bot, so the bot can write to them.
+func (s *Store) HasStarted(ctx context.Context, tgID int64) (bool, error) {
+	var started bool
+	err := s.pool.QueryRow(ctx, `SELECT started_at IS NOT NULL FROM users WHERE tg_id = $1`, tgID).Scan(&started)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, ErrNotFound
+	}
+	return started, err
 }
 
 // ChatPurposeOf returns the chat's purpose (PurposeNone if not assigned).

@@ -125,7 +125,10 @@ func (t *Bot) onChatCallback(ctx context.Context, b *bot.Bot, update *models.Upd
 	}
 
 	prev, err := t.store.ChatPurposeOf(ctx, chatID)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+	// Without the old purpose it is unknown whether the chat was greeted:
+	// then it is not greeted again (/hello does it by hand).
+	prevKnown := err == nil || errors.Is(err, storage.ErrNotFound)
+	if !prevKnown {
 		t.log.Error("chat purpose", "chat_id", chatID, "err", err)
 	}
 	if err := t.store.SetChatPurpose(ctx, chatID, purpose); err != nil {
@@ -141,7 +144,7 @@ func (t *Bot) onChatCallback(ctx context.Context, b *bot.Bot, update *models.Upd
 	answer("Готово: " + purposeLabels[purpose])
 	// A chat that just got its role is greeted: people learn what the bot
 	// does there and start it in one tap.
-	if purpose != storage.PurposeNone && purpose != prev {
+	if prevKnown && purpose != storage.PurposeNone && purpose != prev {
 		t.greetChat(ctx, chatID, purpose)
 	}
 

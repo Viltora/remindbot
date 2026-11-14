@@ -23,7 +23,9 @@ const (
 	cbPeopleList   = "list" // back to /people
 	cbPeopleOpen   = "open" // a person's card
 	cbPeopleRole   = "role" // arg: admin | sales | member
+	cbPeopleRmOK   = "rmok" // removing the role, confirmed
 	cbPeopleLink   = "yg"   // arg: YouGile user ID, or cbPeopleNoYG
+	cbPeopleLinkOK = "ygok" // arg: YouGile user ID; taking it from another person, confirmed
 	cbPeopleNoYG   = "-"
 	peopleLimit    = 60
 	assigneesLimit = 40
@@ -56,7 +58,7 @@ var roleNames = map[storage.Role]string{
 // peopleScreen lists everyone with their role and YouGile link, and the
 // YouGile assignees nobody is linked to.
 func (t *Bot) peopleScreen(ctx context.Context) (string, models.ReplyMarkup, error) {
-	people, err := t.store.ListPeople(ctx, peopleLimit)
+	people, err := t.store.ListPeople(ctx, t.superadminID, peopleLimit)
 	if err != nil {
 		return "", nil, err
 	}
@@ -82,6 +84,9 @@ func (t *Bot) peopleScreen(ctx context.Context) (string, models.ReplyMarkup, err
 	var rows [][]models.InlineKeyboardButton
 	var row []models.InlineKeyboardButton
 	for _, u := range people {
+		if u.TgID == t.superadminID {
+			u.Role = storage.RoleSuperadmin // set in the config, not stored
+		}
 		yg := "—"
 		if a, ok := linked[u.TgID]; ok {
 			yg = html.EscapeString(ygLabel(a))
@@ -125,6 +130,10 @@ func (t *Bot) personCard(ctx context.Context, tgID int64) (string, models.ReplyM
 	if tgID == t.superadminID {
 		u.Role = storage.RoleSuperadmin
 	}
+	started, err := t.store.HasStarted(ctx, tgID)
+	if err != nil {
+		return "", nil, err
+	}
 	cur, hasYG, err := t.store.LinkedYouGile(ctx, tgID)
 	if err != nil {
 		return "", nil, err
@@ -146,7 +155,12 @@ func (t *Bot) personCard(ctx context.Context, tgID int64) (string, models.ReplyM
 		name, roleIcons[roleOrMember(u)], roleNames[roleOrMember(u)], yg)
 
 	var rows [][]models.InlineKeyboardButton
-	if u.Role != storage.RoleSuperadmin {
+	if u.Role != storage.RoleSuperadmin && !started {
+		text = strings.Replace(text, "\n\nКто это в YouGile?",
+			"\n<i>Ещё не нажал «Начать» в личке с ботом — роль можно дать после этого: бот должен иметь возможность ему написать.</i>"+
+				"\n\nКто это в YouGile?", 1)
+	}
+	if u.Role != storage.RoleSuperadmin && started {
 		mark := func(r storage.Role, label string) models.InlineKeyboardButton {
 			if roleOrMember(u) == r {
 				label = "✓ " + label
@@ -247,17 +261,64 @@ func (t *Bot) onPeopleCallback(ctx context.Context, b *bot.Bot, update *models.U
 		return
 	case cbPeopleOpen:
 		answer("")
-	case cbPeopleRole:
+	case cbPeopleRole, cbPeopleRmOK:
 		role := storage.Role(arg)
+		if action == cbPeopleRmOK {
+			role = storage.RoleMember
+		}
 		if tgID == t.superadminID || (role != storage.RoleAdmin && role != storage.RoleSales && role != storage.RoleMember) {
 			answer("Некорректная кнопка")
 			return
 		}
+		u, err := t.store.GetUser(ctx, tgID)
+		if err != nil {
+			t.log.Error("load user", "tg_id", tgID, "err", err)
+			answer("Пользователь не найден")
+			return
+		}
+		if roleOrMember(u) == role {
+			answer("Роль уже такая")
+			return
+		}
+		if started, err := t.store.HasStarted(ctx, tgID); err != nil || !started {
+			answer("Сначала человек должен нажать «Начать» в личке с ботом")
+			return
+		}
+		// Taking a role away asks first, as in /admins: an accidental tap
+		// could leave the team without the admin the bot tags.
+		if role == storage.RoleMember && action != cbPeopleRmOK {
+			answer("")
+			t.editScreen(ctx, cq.Message, fmt.Sprintf("Снять роль «%s» у %s?", roleNames[roleOrMember(u)], displayName(u)),
+				&models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{
+					{Text: "Да, снять", CallbackData: peopleData(cbPeopleRmOK, tgID, "")},
+					{Text: "Отмена", CallbackData: peopleData(cbPeopleOpen, tgID, "")},
+				}}})
+			return
+		}
 		answer(t.applyRole(ctx, tgID, role, cq.From.ID))
-	case cbPeopleLink:
+	case cbPeopleLink, cbPeopleLinkOK:
 		ygID := arg
 		if ygID == cbPeopleNoYG {
 			ygID = ""
+		}
+		// A YouGile person linked to someone else is taken over only after
+		// a confirmation.
+		if ygID != "" && action == cbPeopleLink {
+			if other, ok, err := t.linkedElsewhere(ctx, ygID, tgID); err != nil {
+				t.log.Error("load assignees", "err", err)
+				answer("Ошибка, попробуй ещё раз")
+				return
+			} else if ok {
+				answer("")
+				t.editScreen(ctx, cq.Message, fmt.Sprintf(
+					"%s в YouGile сейчас связан(а) с %s. Перепривязать? Тогда бот перестанет отмечать %s по этим задачам.",
+					html.EscapeString(ygLabel(other)), displayName(other.User), displayName(other.User)),
+					&models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{
+						{Text: "Да, перепривязать", CallbackData: peopleData(cbPeopleLinkOK, tgID, ygID)},
+						{Text: "Отмена", CallbackData: peopleData(cbPeopleOpen, tgID, "")},
+					}}})
+				return
+			}
 		}
 		if err := t.store.LinkYouGile(ctx, tgID, ygID); err != nil {
 			if errors.Is(err, storage.ErrNotFound) {
@@ -285,6 +346,21 @@ func (t *Bot) onPeopleCallback(ctx context.Context, b *bot.Bot, update *models.U
 		return
 	}
 	t.editScreen(ctx, cq.Message, text, markup)
+}
+
+// linkedElsewhere returns the YouGile person ygID if it is linked to a
+// Telegram user other than tgID.
+func (t *Bot) linkedElsewhere(ctx context.Context, ygID string, tgID int64) (storage.YouGilePerson, bool, error) {
+	assignees, err := t.store.Assignees(ctx)
+	if err != nil {
+		return storage.YouGilePerson{}, false, err
+	}
+	for _, a := range assignees {
+		if a.ID == ygID && a.User.TgID != 0 && a.User.TgID != tgID {
+			return a, true, nil
+		}
+	}
+	return storage.YouGilePerson{}, false, nil
 }
 
 // editScreen redraws the message a button was pressed on.
