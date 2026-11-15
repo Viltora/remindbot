@@ -142,8 +142,13 @@ func (t *Bot) onAdminCallback(ctx context.Context, b *bot.Bot, update *models.Up
 	}
 
 	if action == cbAdminAsk || action == cbAdminLegacyDel {
+		if refusal := t.askRemoveRole(ctx, cq.Message, targetID); refusal != "" {
+			// A stale screen: show the current one.
+			answer(refusal)
+			t.refreshAdminsScreen(ctx, cq.Message)
+			return
+		}
 		answer("")
-		t.askRemoveRole(ctx, cq.Message, targetID)
 		return
 	}
 
@@ -199,26 +204,45 @@ func (t *Bot) refreshAdminsScreen(ctx context.Context, m models.MaybeInaccessibl
 	}
 }
 
-// applyRole sets a person's role, updates their menu and tells them, and
-// returns the text for the button answer. The rules for both /admins and
-// /people live here: a role is given only to someone who has pressed Start
-// (the bot must be able to write to them); taking one away needs nothing;
-// the current role is not set again. started is read right before the
-// write, so the notice matches the person's state.
-func (t *Bot) applyRole(ctx context.Context, targetID int64, role storage.Role, by int64) string {
+// roleUnchanged is roleTarget's refusal when the person already has the role.
+const roleUnchanged = "Роль уже такая"
+
+// roleTarget loads the person whose role is to become role and checks the
+// rules for both /admins and /people: a role is given only to someone who
+// has pressed Start (the bot must be able to write to them); taking one away
+// needs nothing; the current role is not set again. refusal is the text for
+// the button answer, or "" if the change may go ahead.
+func (t *Bot) roleTarget(ctx context.Context, targetID int64, role storage.Role) (u storage.User, started bool, refusal string) {
 	u, started, err := t.store.GetPerson(ctx, targetID)
 	if errors.Is(err, storage.ErrNotFound) {
-		return "Пользователь не найден"
+		return u, false, "Пользователь не найден"
 	}
 	if err != nil {
 		t.log.Error("load user", "tg_id", targetID, "err", err)
-		return "Ошибка, попробуй ещё раз"
+		return u, false, "Ошибка, попробуй ещё раз"
 	}
 	if roleOrMember(u) == role {
-		return "Роль уже такая"
+		return u, started, roleUnchanged
 	}
 	if role != storage.RoleMember && !started {
-		return "Сначала человек должен нажать «Начать» в личке с ботом"
+		return u, started, "Сначала человек должен нажать «Начать» в личке с ботом"
+	}
+	return u, started, ""
+}
+
+// applyRole sets a person's role, updates their menu and tells them, and
+// returns the text for the button answer. The rules are in roleTarget;
+// started is read right before the write, so the notice matches the
+// person's state.
+func (t *Bot) applyRole(ctx context.Context, targetID int64, role storage.Role, by int64) string {
+	_, started, refusal := t.roleTarget(ctx, targetID, role)
+	if refusal == roleUnchanged {
+		// The role may have been changed elsewhere (another screen, the
+		// database) without the menu: bring the menu in line anyway.
+		t.syncMenu(ctx, targetID, role)
+	}
+	if refusal != "" {
+		return refusal
 	}
 	if err := t.store.SetRole(ctx, targetID, role); err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
@@ -229,8 +253,9 @@ func (t *Bot) applyRole(ctx context.Context, targetID int64, role storage.Role, 
 	}
 	t.log.Info("role changed", "tg_id", targetID, "role", role, "by", by, "started", started)
 
-	// The user's private chat ID equals their user ID. Someone who never
-	// pressed Start cannot be reached: send and syncMenu only log that.
+	// The user's private chat ID equals their user ID. The menu is synced
+	// even for someone who never pressed Start: removing one cannot hurt,
+	// and syncMenu only logs that the person is unreachable.
 	t.syncMenu(ctx, targetID, role)
 	var notice, done string
 	switch role {
@@ -243,10 +268,15 @@ func (t *Bot) applyRole(ctx context.Context, targetID int64, role storage.Role, 
 	default:
 		notice, done = "Твоя роль в боте снята.", "Роль снята"
 	}
+	// Not writing at all to someone who never pressed Start gives a clearer
+	// answer than a failed send.
 	if !started {
 		return done + " (человек не уведомлён: не нажимал «Начать»)"
 	}
-	t.send(ctx, targetID, notice, nil)
+	// Someone who pressed Start may have blocked the bot since.
+	if t.sendToPerson(ctx, targetID, notice, nil) == nil {
+		return done + " (человек не уведомлён: сообщение не дошло)"
+	}
 	return done
 }
 
@@ -304,29 +334,24 @@ func plainName(u storage.User) string {
 }
 
 // askRemoveRole replaces the roles screen with a confirmation, so a role is
-// not removed by an accidental tap.
-func (t *Bot) askRemoveRole(ctx context.Context, m models.MaybeInaccessibleMessage, targetID int64) {
-	if m.Message == nil {
-		return
+// not removed by an accidental tap. It returns roleTarget's refusal (for
+// one, the person has no role any more), and then asks nothing.
+func (t *Bot) askRemoveRole(ctx context.Context, m models.MaybeInaccessibleMessage, targetID int64) string {
+	u, _, refusal := t.roleTarget(ctx, targetID, storage.RoleMember)
+	if refusal != "" || m.Message == nil {
+		return refusal
 	}
-	u, err := t.store.GetUser(ctx, targetID)
-	if err != nil {
-		t.log.Error("load user", "tg_id", targetID, "err", err)
-		return
-	}
-	role := "админов"
-	if u.Role == storage.RoleSales {
-		role = "sales"
-	}
-	text := fmt.Sprintf("Точно снять %s с %s?\nЕму придёт сообщение, меню и напоминания пропадут.", displayName(u), role)
+	text := fmt.Sprintf("Точно снять роль «%s» у %s?\nЕму придёт сообщение, меню и напоминания пропадут.",
+		roleNames[roleOrMember(u)], displayName(u))
 	markup := &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{
 		{Text: "✅ Да, снять", CallbackData: fmt.Sprintf("%s%s:%d", cbAdminPrefix, cbAdminDel, targetID)},
 		{Text: "↩️ Отмена", CallbackData: cbAdminPrefix + cbAdminBack + ":0"},
 	}}}
-	_, err = t.api.EditMessageText(ctx, &bot.EditMessageTextParams{
+	_, err := t.api.EditMessageText(ctx, &bot.EditMessageTextParams{
 		ChatID: m.Message.Chat.ID, MessageID: m.Message.ID, Text: text, ParseMode: models.ParseModeHTML, ReplyMarkup: markup,
 	})
 	if err != nil {
 		t.log.Error("edit admins screen", "err", err)
 	}
+	return ""
 }

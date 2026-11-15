@@ -282,21 +282,12 @@ func (t *Bot) onPeopleCallback(ctx context.Context, b *bot.Bot, update *models.U
 			return
 		}
 		// Taking a role away asks first, as in /admins: an accidental tap
-		// could leave the team without the admin the bot tags. The other
-		// rules are in applyRole.
+		// could leave the team without the admin the bot tags. The rules
+		// are in roleTarget.
 		if role == storage.RoleMember && action != cbPeopleRmOK {
-			u, err := t.store.GetUser(ctx, tgID)
-			if errors.Is(err, storage.ErrNotFound) {
-				answer("Пользователь не найден")
-				return
-			}
-			if err != nil {
-				t.log.Error("load user", "tg_id", tgID, "err", err)
-				answer("Ошибка, попробуй ещё раз")
-				return
-			}
-			if roleOrMember(u) == storage.RoleMember {
-				answer("Роль уже такая")
+			u, _, refusal := t.roleTarget(ctx, tgID, storage.RoleMember)
+			if refusal != "" {
+				answer(refusal)
 				return
 			}
 			answer("")

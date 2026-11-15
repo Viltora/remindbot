@@ -188,15 +188,29 @@ func (t *Bot) reply(ctx context.Context, msg *models.Message, html string) {
 }
 
 // send sends an HTML message; markup may be nil. It returns the sent message,
-// or nil if sending failed (the error is logged).
+// or nil if sending failed (the error is logged and the superadmin alerted).
 func (t *Bot) send(ctx context.Context, chatID int64, html string, markup models.ReplyMarkup) *models.Message {
+	return t.deliver(ctx, chatID, html, markup, false)
+}
+
+// sendToPerson is send for a one-off notice to a person (a role change, the
+// bot added to a chat), where the person not being reachable — never pressed
+// Start, blocked the bot, deleted the account — is their choice, not a fault
+// of the bot: it is logged as a warning, without an alert. Reminders and
+// everything else that must arrive go through send, so such a failure there
+// is still alerted.
+func (t *Bot) sendToPerson(ctx context.Context, chatID int64, html string, markup models.ReplyMarkup) *models.Message {
+	return t.deliver(ctx, chatID, html, markup, true)
+}
+
+func (t *Bot) deliver(ctx context.Context, chatID int64, html string, markup models.ReplyMarkup, quietIfUnreachable bool) *models.Message {
 	m, err := t.sendWithRetry(ctx, &bot.SendMessageParams{
 		ChatID:      chatID,
 		Text:        html,
 		ParseMode:   models.ParseModeHTML,
 		ReplyMarkup: markup,
 	})
-	if isUnreachableUser(chatID, err) {
+	if quietIfUnreachable && isUnreachableUser(chatID, err) {
 		t.log.Warn("send message: the person cannot be written to", "chat_id", chatID, "text", preview(html), "err", err)
 		return nil
 	}

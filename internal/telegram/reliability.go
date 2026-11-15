@@ -7,6 +7,7 @@ import (
 	"html"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,16 +29,17 @@ const (
 	syncStaleAfter = 2 * time.Hour
 )
 
-// unreachableUser matches Telegram's answers for a person the bot cannot
-// write to privately: they never pressed Start, blocked the bot, or deleted
-// their account. That is not a failure of the bot: it is logged as a
-// warning, without an alert.
-var unreachableUser = regexp.MustCompile(`(?i)chat not found|bot was blocked by the user|bot can't initiate conversation|user is deactivated`)
-
 // isUnreachableUser reports whether err means the person chatID (a private
-// chat: positive ID; groups are negative) cannot be written to.
+// chat: positive ID; groups are negative) cannot be written to: they never
+// pressed Start ("chat not found"), blocked the bot, or deleted their account.
+// For a private chat Telegram answers all of these with 403 Forbidden, except
+// "chat not found", which is 400 Bad Request.
 func isUnreachableUser(chatID int64, err error) bool {
-	return chatID > 0 && err != nil && unreachableUser.MatchString(err.Error())
+	if chatID <= 0 || err == nil {
+		return false
+	}
+	return errors.Is(err, bot.ErrorForbidden) ||
+		errors.Is(err, bot.ErrorBadRequest) && strings.Contains(err.Error(), "chat not found")
 }
 
 var telegramStatus = regexp.MustCompile(`error response from telegram for method \w+, (\d{3})`)

@@ -56,14 +56,14 @@ func (t *Bot) onBotAdded(ctx context.Context, upd *models.ChatMemberUpdated) {
 		t.send(ctx, t.superadminID, fmt.Sprintf("✅ %s добавил бота в чат «%s».\nДля чего этот чат?",
 			displayName(by), title), purposeButtons(chat.ID))
 	}
-	// An admin who never pressed Start cannot be written to: send only logs
-	// that, without an alert.
+	// An admin who never pressed Start cannot be written to: sendToPerson
+	// only logs that, without an alert.
 	switch {
 	case by.TgID == t.superadminID:
 	case t.superadminID == 0:
-		t.send(ctx, by.TgID, fmt.Sprintf("✅ Бот добавлен в чат «%s».\nДля чего этот чат?", title), purposeButtons(chat.ID))
+		t.sendToPerson(ctx, by.TgID, fmt.Sprintf("✅ Бот добавлен в чат «%s».\nДля чего этот чат?", title), purposeButtons(chat.ID))
 	default:
-		t.send(ctx, by.TgID, fmt.Sprintf(
+		t.sendToPerson(ctx, by.TgID, fmt.Sprintf(
 			"✅ Бот добавлен в чат «%s».\nРоль чату назначит суперадмин — или задай её сам в /chats.", title), nil)
 	}
 }

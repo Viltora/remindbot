@@ -83,17 +83,23 @@ func TestSyncStale(t *testing.T) {
 }
 
 func TestIsUnreachableUser(t *testing.T) {
+	// The errors as go-telegram/bot builds them (raw_request.go).
+	forbidden := func(d string) error { return fmt.Errorf("%w, %s", bot.ErrorForbidden, d) }
+	badRequest := func(d string) error { return fmt.Errorf("%w, %s", bot.ErrorBadRequest, d) }
 	for _, tc := range []struct {
 		chatID int64
 		err    error
 		want   bool
 	}{
-		{42, errors.New("error response from telegram for method sendMessage, Bad Request: chat not found"), true},
-		{42, errors.New("error response from telegram for method sendMessage, Forbidden: bot was blocked by the user"), true},
-		{42, errors.New("error response from telegram for method sendMessage, Forbidden: bot can't initiate conversation with a user"), true},
-		{42, errors.New("error response from telegram for method sendMessage, Forbidden: user is deactivated"), true},
-		{-100123, errors.New("error response from telegram for method sendMessage, Bad Request: chat not found"), false}, // a group is a real problem
+		{42, badRequest("Bad Request: chat not found"), true},
+		{42, forbidden("Forbidden: bot was blocked by the user"), true},
+		{42, forbidden("Forbidden: bot can't initiate conversation with a user"), true},
+		{42, forbidden("Forbidden: user is deactivated"), true},
+		{-100123, badRequest("Bad Request: chat not found"), false}, // a group is a real problem
+		{-100123, forbidden("Forbidden: bot was kicked from the supergroup chat"), false},
+		{42, badRequest("Bad Request: can't parse entities"), false},
 		{42, errors.New("error response from telegram for method sendMessage, 502 Bad Gateway"), false},
+		{42, errors.New("Bad Request: chat not found"), false}, // not from the library
 		{42, nil, false},
 	} {
 		if got := isUnreachableUser(tc.chatID, tc.err); got != tc.want {
