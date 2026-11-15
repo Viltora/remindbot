@@ -118,19 +118,17 @@ func tally(counts []int, labels []stateLabel, named bool) string {
 	return strings.Join(parts, " · ")
 }
 
-// Where a publication goes, as /today groups them.
-const (
-	platformInstagram = "📸 Instagram"
-	platformTelegram  = "✈️ Telegram"
-)
+// todayGroups are how /today splits the publications: Instagram stories,
+// Instagram posts and reels, and Telegram.
+type todayGroup struct {
+	title string
+	types []storage.TaskType
+}
 
-var platforms = []string{platformInstagram, platformTelegram}
-
-func platformOf(t storage.TaskType) string {
-	if t == storage.TaskTelegram {
-		return platformTelegram
-	}
-	return platformInstagram
+var todayGroups = []todayGroup{
+	{"📱 Сторис", []storage.TaskType{storage.TaskStories}},
+	{"🖼 Посты и рилсы", []storage.TaskType{storage.TaskPost, storage.TaskReels}},
+	{"✈️ Telegram", []storage.TaskType{storage.TaskTelegram}},
 }
 
 // todayText is the publications part of /today, from the tasks published
@@ -157,12 +155,28 @@ func todayText(tasks []storage.Task, names map[string]string, now time.Time, ask
 			counts[pubStateOf(task, now, asks)]++
 		}
 		fmt.Fprintf(&sb, "📌 <b>Публикации · %d</b>\n%s\n", len(today), tally(counts[:], pubLabels[:], true))
-		// Instagram and Telegram apart, each in a quote: the bar on its left
-		// shows where one ends.
-		for _, pl := range platforms {
+		// Each group in a quote: the bar on its left shows where one ends.
+		// A type in no group (should YouGile get a new column) goes last.
+		grouped := map[storage.TaskType]bool{}
+		groups := slices.Clone(todayGroups)
+		for _, g := range groups {
+			for _, ty := range g.types {
+				grouped[ty] = true
+			}
+		}
+		var other []storage.TaskType
+		for _, task := range today {
+			if !grouped[task.Type] && !slices.Contains(other, task.Type) {
+				other = append(other, task.Type)
+			}
+		}
+		for _, ty := range other {
+			groups = append(groups, todayGroup{ty.Label(), []storage.TaskType{ty}})
+		}
+		for _, g := range groups {
 			var items []string
 			for _, task := range today {
-				if platformOf(task.Type) != pl {
+				if !slices.Contains(g.types, task.Type) {
 					continue
 				}
 				item := fmt.Sprintf("<b>%s</b> %s\n└ %s · %s", clock(task.PublishAt.In(now.Location())),
@@ -173,7 +187,7 @@ func todayText(tasks []storage.Task, names map[string]string, now time.Time, ask
 				items = append(items, item)
 			}
 			if len(items) > 0 {
-				fmt.Fprintf(&sb, "\n<b>%s · %d</b>\n<blockquote>%s</blockquote>\n", pl, len(items), strings.Join(items, "\n\n"))
+				fmt.Fprintf(&sb, "\n<b>%s · %d</b>\n<blockquote>%s</blockquote>\n", g.title, len(items), strings.Join(items, "\n\n"))
 			}
 		}
 	}

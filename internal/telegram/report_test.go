@@ -67,8 +67,9 @@ func TestTodayText(t *testing.T) {
 		"<b>06:00</b> 📱 Сторис «сторис партнёра»\n└ без исполнителя · ⚠️ нет ответа на 4 вопроса",
 		"<b>08:00</b> 📱 Сторис «подводка к напиткам»\n└ Вера · ✅ выложено, ответ с 1-й попытки",
 		"<b>13:00</b> 🎬 Рилс «летние коктейли»\n└ Вера, Лена · 🔔 напомнил\n└ 📎 материал: ✅ получен</blockquote>",
-		// Instagram and Telegram apart, each in a quote.
-		"<b>📸 Instagram · 3</b>\n<blockquote><b>06:00</b>",
+		// Stories, posts with reels, and Telegram apart, each in a quote.
+		"<b>📱 Сторис · 2</b>\n<blockquote><b>06:00</b>",
+		"<b>🖼 Посты и рилсы · 1</b>\n<blockquote><b>13:00</b>",
 		"<b>✈️ Telegram · 1</b>\n<blockquote><b>15:00</b> ✈️ Телеграм",
 	} {
 		if !strings.Contains(got, want) {
