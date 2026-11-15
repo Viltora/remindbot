@@ -56,8 +56,16 @@ func (t *Bot) onBotAdded(ctx context.Context, upd *models.ChatMemberUpdated) {
 		t.send(ctx, t.superadminID, fmt.Sprintf("✅ %s добавил бота в чат «%s».\nДля чего этот чат?",
 			displayName(by), title), purposeButtons(chat.ID))
 	}
+	// The admin is written to only if they have pressed Start: otherwise the
+	// send fails and raises a false alert.
+	_, started, err := t.store.GetPerson(ctx, by.TgID)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		t.log.Error("load user", "tg_id", by.TgID, "err", err)
+	}
 	switch {
 	case by.TgID == t.superadminID:
+	case !started:
+		t.log.Warn("cannot tell the admin who added the bot: they have not started it", "tg_id", by.TgID, "chat_id", chat.ID)
 	case t.superadminID == 0:
 		t.send(ctx, by.TgID, fmt.Sprintf("✅ Бот добавлен в чат «%s».\nДля чего этот чат?", title), purposeButtons(chat.ID))
 	default:

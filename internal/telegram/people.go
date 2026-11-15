@@ -312,7 +312,7 @@ func (t *Bot) onPeopleCallback(ctx context.Context, b *bot.Bot, update *models.U
 				}}})
 			return
 		}
-		answer(t.applyRole(ctx, tgID, role, cq.From.ID))
+		answer(t.applyRole(ctx, tgID, role, cq.From.ID, started))
 	case cbPeopleLink, cbPeopleLinkOK:
 		ygID := arg
 		if ygID == cbPeopleNoYG {
