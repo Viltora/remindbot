@@ -71,7 +71,7 @@ func (t *Bot) peopleScreen(ctx context.Context, editable bool) (string, models.R
 	if err != nil {
 		return "", nil, err
 	}
-	assignees, err := t.store.Assignees(ctx)
+	assignees, err := t.store.YouGilePeople(ctx)
 	if err != nil {
 		return "", nil, err
 	}
@@ -149,7 +149,7 @@ func (t *Bot) personCard(ctx context.Context, tgID int64) (string, models.ReplyM
 	if err != nil {
 		return "", nil, err
 	}
-	assignees, err := t.store.Assignees(ctx)
+	assignees, err := t.store.YouGilePeople(ctx)
 	if err != nil {
 		return "", nil, err
 	}
@@ -210,7 +210,7 @@ func (t *Bot) personCard(ctx context.Context, tgID int64) (string, models.ReplyM
 		rows = append(rows, row)
 	}
 	if len(assignees) == 0 {
-		text += "\n<i>Исполнителей из YouGile пока нет: они появятся после сверки с YouGile.</i>"
+		text += "\n<i>Людей из YouGile пока нет: они появятся после сверки с YouGile.</i>"
 	}
 	noYG := "🚫 Нет в YouGile"
 	if !hasYG {

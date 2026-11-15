@@ -8,12 +8,12 @@ import (
 
 func TestWhoTagged(t *testing.T) {
 	names := map[string]string{"ks": "Катя", "am": "Лена", "mail": "someone@example.com", "blank": ""}
-	users := map[string]storage.User{"ks": {TgID: 1, Username: "kseniya"}, "an": {TgID: 2, FirstName: "Аня"}}
+	users := map[string]storage.User{"ks": {TgID: 1, Username: "katya"}, "an": {TgID: 2, FirstName: "Аня"}}
 	for _, tc := range []struct {
 		ids  []string
 		want string
 	}{
-		{[]string{"ks", "am"}, "@kseniya, Лена"},
+		{[]string{"ks", "am"}, "@katya, Лена"},
 		{[]string{"an"}, `<a href="tg://user?id=2">Аня</a>`},
 		{[]string{"mail"}, "исполнитель"},
 		{[]string{"mail", "am"}, "Лена"},

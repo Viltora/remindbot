@@ -7,19 +7,19 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// YouGilePerson is a YouGile user who is or was an assignee of a tracked
-// task, and the Telegram user linked to them, if any (User.TgID 0 = none).
+// YouGilePerson is a YouGile user and the Telegram user linked to them, if
+// any (User.TgID 0 = none).
 type YouGilePerson struct {
 	ID   string
 	Name string // real name from YouGile; may be empty or an e-mail
 	User User
 }
 
-// Assignees returns the YouGile people assigned to the tracked tasks, by
-// name, with their linked Telegram users.
-func (s *Store) Assignees(ctx context.Context) ([]YouGilePerson, error) {
+// YouGilePeople returns everyone in the YouGile company, by name, with their
+// linked Telegram users. Not only the assignees of the tracked tasks: someone
+// with no task in the next days must still be linkable.
+func (s *Store) YouGilePeople(ctx context.Context) ([]YouGilePerson, error) {
 	rows, err := s.pool.Query(ctx, personSelect+`
-		WHERE y.id IN (SELECT unnest(assignees) FROM tasks)
 		ORDER BY lower(y.real_name), y.id`)
 	if err != nil {
 		return nil, err
