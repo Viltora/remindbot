@@ -118,6 +118,21 @@ func tally(counts []int, labels []stateLabel, named bool) string {
 	return strings.Join(parts, " · ")
 }
 
+// Where a publication goes, as /today groups them.
+const (
+	platformInstagram = "📸 Instagram"
+	platformTelegram  = "✈️ Telegram"
+)
+
+var platforms = []string{platformInstagram, platformTelegram}
+
+func platformOf(t storage.TaskType) string {
+	if t == storage.TaskTelegram {
+		return platformTelegram
+	}
+	return platformInstagram
+}
+
 // todayText is the publications part of /today, from the tasks published
 // within [today, today+tickAhead).
 func todayText(tasks []storage.Task, names map[string]string, now time.Time, asks bool) string {
@@ -142,11 +157,23 @@ func todayText(tasks []storage.Task, names map[string]string, now time.Time, ask
 			counts[pubStateOf(task, now, asks)]++
 		}
 		fmt.Fprintf(&sb, "📌 <b>Публикации · %d</b>\n%s\n", len(today), tally(counts[:], pubLabels[:], true))
-		for _, task := range today {
-			fmt.Fprintf(&sb, "\n<b>%s</b> %s\n└ %s · %s\n", clock(task.PublishAt.In(now.Location())),
-				taskTitle(task), whoOf(task, names), publishStatusText(task, now, asks))
-			if task.Type.NeedsMaterial() {
-				sb.WriteString("└ 📎 материал: " + materialStatusText(task, now) + "\n")
+		// Instagram and Telegram apart, each in a quote: the bar on its left
+		// shows where one ends.
+		for _, pl := range platforms {
+			var items []string
+			for _, task := range today {
+				if platformOf(task.Type) != pl {
+					continue
+				}
+				item := fmt.Sprintf("<b>%s</b> %s\n└ %s · %s", clock(task.PublishAt.In(now.Location())),
+					taskTitle(task), whoOf(task, names), publishStatusText(task, now, asks))
+				if task.Type.NeedsMaterial() {
+					item += "\n└ 📎 материал: " + materialStatusText(task, now)
+				}
+				items = append(items, item)
+			}
+			if len(items) > 0 {
+				fmt.Fprintf(&sb, "\n<b>%s · %d</b>\n<blockquote>%s</blockquote>\n", pl, len(items), strings.Join(items, "\n\n"))
 			}
 		}
 	}
