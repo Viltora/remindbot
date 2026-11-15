@@ -15,18 +15,23 @@ import (
 	"remindbot/internal/version"
 )
 
-// Callback data for the roles screen: "adm:<action>:<tg_id>".
+// Callback data for the admins screen: "adm:<action>:<tg_id>".
 const (
 	cbAdminPrefix = "adm:"
-	cbAdminAdd    = "add"   // make admin
-	cbAdminSales  = "sales" // make sales
-	cbAdminMain   = "main"  // make the primary admin
-	cbAdminAsk    = "ask"   // ask to confirm removing the role
-	cbAdminDel    = "rm"    // remove the role (confirmed)
+	cbAdminAdd    = "add"  // make admin
+	cbAdminMain   = "main" // make the primary admin
+	cbAdminAsk    = "ask"  // ask to confirm removing the role
+	cbAdminDel    = "rm"   // remove the role (confirmed)
+	// Old screens offered "make sales"; sales are now set in /people.
+	cbAdminLegacySales = "sales"
 	// Old screens sent "del" for an immediate removal; it now asks too.
 	cbAdminLegacyDel = "del"
-	cbAdminBack      = "back" // cancel: back to the roles screen
+	cbAdminBack      = "back" // cancel: back to the admins screen
 )
+
+// salesInPeople answers a stale /admins button about a sales person: the
+// admins screen is for admins only.
+const salesInPeople = "Продажников назначают и снимают в /people"
 
 // How many candidates (users who started the bot) to offer on the admins screen.
 const adminCandidatesLimit = 10
@@ -43,10 +48,6 @@ func (t *Bot) onAdmins(ctx context.Context, _ *bot.Bot, update *models.Update) {
 
 func (t *Bot) adminsScreen(ctx context.Context) (string, models.ReplyMarkup, error) {
 	admins, err := t.store.ListUsers(ctx, storage.RoleAdmin, 100)
-	if err != nil {
-		return "", nil, err
-	}
-	sales, err := t.store.ListUsers(ctx, storage.RoleSales, 100)
 	if err != nil {
 		return "", nil, err
 	}
@@ -85,28 +86,17 @@ func (t *Bot) adminsScreen(ctx context.Context) (string, models.ReplyMarkup, err
 		})
 	}
 
-	sb.WriteString("\n💼 <b>Sales</b>\n")
-	if len(sales) == 0 {
-		sb.WriteString("пока нет\n")
-	}
-	for _, u := range sales {
-		sb.WriteString("• " + displayName(u) + "\n")
-		rows = append(rows, []models.InlineKeyboardButton{button("❌ Снять sales "+plainName(u), cbAdminAsk, u.TgID)})
-	}
-
 	if len(candidates) > 0 {
 		sb.WriteString("\nПисали боту:\n")
 	}
 	for _, u := range candidates {
 		sb.WriteString("• " + displayName(u) + "\n")
-		rows = append(rows, []models.InlineKeyboardButton{
-			button("⭐ Админ "+plainName(u), cbAdminAdd, u.TgID),
-			button("💼 Sales "+plainName(u), cbAdminSales, u.TgID),
-		})
+		rows = append(rows, []models.InlineKeyboardButton{button("⭐ Админ "+plainName(u), cbAdminAdd, u.TgID)})
 	}
 	if len(candidates) == 0 {
-		sb.WriteString("\nЧтобы дать человеку роль, пусть он напишет боту /start.")
+		sb.WriteString("\nЧтобы сделать человека админом, пусть он напишет боту /start.")
 	}
+	sb.WriteString("\n\nПродажники и все остальные — в /people.")
 
 	var markup models.ReplyMarkup
 	if len(rows) > 0 {
@@ -168,8 +158,10 @@ func (t *Bot) onAdminCallback(ctx context.Context, b *bot.Bot, update *models.Up
 	switch action {
 	case cbAdminAdd:
 		role = storage.RoleAdmin
-	case cbAdminSales:
-		role = storage.RoleSales
+	case cbAdminLegacySales:
+		answer(salesInPeople)
+		t.refreshAdminsScreen(ctx, cq.Message)
+		return
 	case cbAdminDel:
 		role = storage.RoleMember
 	default:
@@ -333,16 +325,21 @@ func plainName(u storage.User) string {
 	return u.FirstName
 }
 
-// askRemoveRole replaces the roles screen with a confirmation, so a role is
+// askRemoveRole replaces the admins screen with a confirmation, so a role is
 // not removed by an accidental tap. It returns roleTarget's refusal (for
 // one, the person has no role any more), and then asks nothing.
 func (t *Bot) askRemoveRole(ctx context.Context, m models.MaybeInaccessibleMessage, targetID int64) string {
 	u, _, refusal := t.roleTarget(ctx, targetID, storage.RoleMember)
-	if refusal != "" || m.Message == nil {
+	if refusal != "" {
 		return refusal
 	}
-	text := fmt.Sprintf("Точно снять роль «%s» у %s?\nЕму придёт сообщение, меню и напоминания пропадут.",
-		roleNames[roleOrMember(u)], displayName(u))
+	if u.Role == storage.RoleSales {
+		return salesInPeople // a stale screen
+	}
+	if m.Message == nil {
+		return ""
+	}
+	text := fmt.Sprintf("Точно снять %s с админов?\nЕму придёт сообщение, меню пропадёт.", displayName(u))
 	markup := &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{
 		{Text: "✅ Да, снять", CallbackData: fmt.Sprintf("%s%s:%d", cbAdminPrefix, cbAdminDel, targetID)},
 		{Text: "↩️ Отмена", CallbackData: cbAdminPrefix + cbAdminBack + ":0"},
