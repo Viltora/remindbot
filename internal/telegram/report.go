@@ -83,6 +83,7 @@ const (
 	matWaiting
 	matAhead
 	matNotAsked
+	matAsked // asked for; with the replies off, nothing more is known
 	matStates
 )
 
@@ -92,11 +93,17 @@ var matLabels = [matStates]stateLabel{
 	matWaiting:  {"⏳", "ждём"},
 	matAhead:    {"🕓", "запросим"},
 	matNotAsked: {"🔕", "не запрашивали"},
+	matAsked:    {"📨", "попросили"},
 }
 
-func matStateOf(task storage.Task, now time.Time) matState {
+// matStateOf says where the material stands; replies tells whether the bot
+// takes it as a reply (FEATURE_MATERIAL_REPLIES). Without the replies it
+// cannot know whether the material came, only whether it was asked for.
+func matStateOf(task storage.Task, now time.Time, replies bool) matState {
 	switch {
-	case !task.MaterialReceivedAt.IsZero():
+	case !replies && task.MaterialStep > 0:
+		return matAsked
+	case replies && !task.MaterialReceivedAt.IsZero():
 		return matReceived
 	case task.MaterialStep > 0 && !now.Before(task.PublishAt):
 		return matMissed
@@ -170,7 +177,7 @@ func groupByKind(tasks []storage.Task) []taskGroup {
 
 // todayText is the publications part of /today, from the tasks published
 // within [today, today+tickAhead).
-func todayText(tasks []storage.Task, names map[string]string, now time.Time, asks bool) string {
+func todayText(tasks []storage.Task, names map[string]string, now time.Time, asks, replies bool) string {
 	tomorrow := startOfDay(now).AddDate(0, 0, 1)
 	var today, asked []storage.Task
 	for _, task := range tasks {
@@ -199,7 +206,7 @@ func todayText(tasks []storage.Task, names map[string]string, now time.Time, ask
 				item := fmt.Sprintf("<b>%s</b> %s\n└ %s · %s", clock(task.PublishAt.In(now.Location())),
 					taskTitle(task), whoOf(task, names), publishStatusText(task, now, asks))
 				if task.Type.NeedsMaterial() {
-					item += "\n└ 📎 материал: " + materialStatusText(task, now)
+					item += "\n└ 📎 материал: " + materialStatusText(task, now, replies)
 				}
 				items = append(items, item)
 			}
@@ -210,7 +217,7 @@ func todayText(tasks []storage.Task, names map[string]string, now time.Time, ask
 		sb.WriteString("\n📎 <b>Материал на согласование</b> · запрос сегодня\n")
 		for _, task := range asked {
 			fmt.Fprintf(&sb, "\n<b>%s</b> %s\n└ %s · %s\n", dayTime(task.PublishAt.In(now.Location())),
-				taskTitle(task), whoOf(task, names), materialStatusText(task, now))
+				taskTitle(task), whoOf(task, names), materialStatusText(task, now, replies))
 		}
 	}
 	return strings.TrimSuffix(sb.String(), "\n")
@@ -219,7 +226,7 @@ func todayText(tasks []storage.Task, names map[string]string, now time.Time, ask
 // weekText is /week: the publications of the week from Monday, what needs
 // attention and the week day by day, and the sales reports (none when the poll is off,
 // sales == nil and salesOn false).
-func weekText(tasks []storage.Task, names map[string]string, sales []storage.SalesReport, now time.Time, yougile, asks, salesOn bool) string {
+func weekText(tasks []storage.Task, names map[string]string, sales []storage.SalesReport, now time.Time, yougile, asks, replies, salesOn bool) string {
 	start := startOfWeek(now)
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "📊 <b>Неделя %s – %s</b>\n<i>на %s, %s</i>\n\n",
@@ -231,7 +238,7 @@ func weekText(tasks []storage.Task, names map[string]string, sales []storage.Sal
 	case len(tasks) == 0:
 		sb.WriteString("📌 Публикаций на этой неделе нет.\n")
 	default:
-		sb.WriteString(weekTasksText(tasks, names, now, start, asks))
+		sb.WriteString(weekTasksText(tasks, names, now, start, asks, replies))
 	}
 
 	if salesOn {
@@ -243,7 +250,7 @@ func weekText(tasks []storage.Task, names map[string]string, sales []storage.Sal
 
 // weekTasksText is the publications part of /week: what needs attention,
 // then the week day by day, one short line per publication.
-func weekTasksText(tasks []storage.Task, names map[string]string, now, start time.Time, asks bool) string {
+func weekTasksText(tasks []storage.Task, names map[string]string, now, start time.Time, asks, replies bool) string {
 	loc := now.Location()
 	var sb strings.Builder
 
@@ -269,7 +276,7 @@ func weekTasksText(tasks []storage.Task, names map[string]string, now, start tim
 	}
 	noAssignee := 0
 	for _, task := range tasks {
-		if task.Type.NeedsMaterial() && matStateOf(task, now) == matMissed {
+		if task.Type.NeedsMaterial() && matStateOf(task, now, replies) == matMissed {
 			attention = append(attention, "• 📎 материал не прислали: "+ref(task))
 		}
 		if asks {
@@ -304,7 +311,7 @@ func weekTasksText(tasks []storage.Task, names map[string]string, now, start tim
 			line := fmt.Sprintf("%s %s «%s» · %s", clock(p), typeIcon(task.Type),
 				html.EscapeString(shorten(task.Title, weekTitleLen)), shortWho(task, names))
 			if task.Type.NeedsMaterial() {
-				st := matStateOf(task, now)
+				st := matStateOf(task, now, replies)
 				matSeen[st] = true
 				line += " · 📎" + matLabels[st].icon
 			}
@@ -431,8 +438,13 @@ func publishStatusText(task storage.Task, now time.Time, asks bool) string {
 }
 
 // materialStatusText says where the material stands, for /today.
-func materialStatusText(task storage.Task, now time.Time) string {
-	switch matStateOf(task, now) {
+func materialStatusText(task storage.Task, now time.Time, replies bool) string {
+	switch matStateOf(task, now, replies) {
+	case matAsked:
+		if task.MaterialStep >= materialLastStep {
+			return "📨 попросил · напомнил"
+		}
+		return "📨 попросил · напомню через час"
 	case matReceived:
 		return "✅ получен"
 	case matMissed:
@@ -488,7 +500,7 @@ func (t *Bot) tasksTodayText(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return todayText(tasks, names, now, t.features.PublishQuestions), nil
+	return todayText(tasks, names, now, t.features.PublishQuestions, t.features.MaterialReplies), nil
 }
 
 // weekReport is /week.
@@ -511,7 +523,7 @@ func (t *Bot) weekReport(ctx context.Context) (string, error) {
 			return "", err
 		}
 	}
-	return weekText(tasks, names, sales, now, t.yg != nil, t.features.PublishQuestions, t.features.SalesPoll), nil
+	return weekText(tasks, names, sales, now, t.yg != nil, t.features.PublishQuestions, t.features.MaterialReplies, t.features.SalesPoll), nil
 }
 
 func startOfDay(t time.Time) time.Time {

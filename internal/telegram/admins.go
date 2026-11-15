@@ -257,6 +257,10 @@ func (t *Bot) applyRole(ctx context.Context, targetID int64, role storage.Role, 
 		notice, done = "Тебе назначена роль продажника 💼\n"+
 			"По понедельникам, средам и пятницам в 16:00 я буду напоминать заполнить отчёт в Яндекс Документах.",
 			"Назначен продажником"
+	case storage.RoleTelegram:
+		notice, done = "Тебе назначена роль «Телеграм» ✈️\n"+
+			"В дни, когда есть посты в телеграме, за час до первого я отмечу тебя в чате выкладки и пришлю их список.",
+			"Назначен на Телеграм"
 	default:
 		notice, done = "Твоя роль в боте снята.", "Роль снята"
 	}
@@ -310,10 +314,10 @@ func (t *Bot) onStatus(ctx context.Context, _ *bot.Bot, update *models.Update) {
 	}
 
 	text += fmt.Sprintf("\n👥 Пользователей: %d\n"+
-		"   админов: %d · sales: %d · обычных: %d\n"+
+		"   админов: %d · sales: %d · телеграм: %d · обычных: %d\n"+
 		"   замечены в групповом чате: %d\n"+
 		"\n💬 Групповые чаты: %s",
-		st.Users, st.Admins, st.Sales, st.Regular, st.InGroups, group)
+		st.Users, st.Admins, st.Sales, st.Telegram, st.Regular, st.InGroups, group)
 	t.send(ctx, update.Message.Chat.ID, text, nil)
 }
 
@@ -333,8 +337,8 @@ func (t *Bot) askRemoveRole(ctx context.Context, m models.MaybeInaccessibleMessa
 	if refusal != "" {
 		return refusal
 	}
-	if u.Role == storage.RoleSales {
-		return salesInPeople // a stale screen
+	if u.Role != storage.RoleAdmin {
+		return "Это не админ: его роль меняют в /people" // a stale screen
 	}
 	if m.Message == nil {
 		return ""

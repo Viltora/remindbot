@@ -1,6 +1,8 @@
 package telegram
 
 import (
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -198,5 +200,71 @@ func TestJudgeReply(t *testing.T) {
 		if v := judgeReply(tc.task, tc.kind, tc.msg, now); v != tc.want {
 			t.Errorf("%s: %d, want %d", name, v, tc.want)
 		}
+	}
+}
+
+func TestTelegramDayDue(t *testing.T) {
+	tg := func(id string, p time.Time) storage.Task {
+		return storage.Task{ID: id, Type: storage.TaskTelegram, Title: id, PublishAt: p, Status: storage.PublishPending}
+	}
+	ids := func(ts []storage.Task) string {
+		var out []string
+		for _, x := range ts {
+			out = append(out, x.ID)
+		}
+		return strings.Join(out, ",")
+	}
+	day := []storage.Task{
+		tg("t18", at(22, 18, 0)), tg("t16", at(22, 16, 0)), tg("t17", at(22, 17, 0)),
+		tg("tomorrow", at(23, 16, 0)),
+		{ID: "story", Type: storage.TaskStories, PublishAt: at(22, 16, 0), Status: storage.PublishPending},
+	}
+	check := func(name string, tasks []storage.Task, now time.Time, want string) {
+		t.Helper()
+		if got := ids(telegramDayDue(tasks, now)); got != want {
+			t.Errorf("%s: %q, want %q", name, got, want)
+		}
+	}
+	check("before the hour", day, at(22, 14, 59), "")
+	check("an hour before the first: the day's posts in order", day, at(22, 15, 0), "t16,t17,t18")
+	check("late, before the first", day, at(22, 15, 40), "t16,t17,t18")
+
+	sent := slices.Clone(day)
+	for i := range sent {
+		if sent[i].Type == storage.TaskTelegram && sameDay(sent[i].PublishAt, at(22, 0, 0)) {
+			sent[i].RemindersSent = 1
+		}
+	}
+	check("already announced", sent, at(22, 15, 30), "")
+	// A post added later in the day gets a message of its own an hour before it.
+	added := append(slices.Clone(sent), tg("t20", at(22, 20, 0)))
+	check("added: not yet", added, at(22, 18, 59), "")
+	check("added: its hour", added, at(22, 19, 0), "t20")
+
+	// The bot was down until 16:30: the posts still ahead are announced.
+	check("after the first post", day, at(22, 16, 30), "t17,t18")
+	// Quiet hours: a 06:30 post is announced at 06:00, not 05:30.
+	early := []storage.Task{tg("t0630", at(22, 6, 30))}
+	check("quiet hours: before 06:00", early, at(22, 5, 59), "")
+	check("quiet hours: at 06:00", early, at(22, 6, 0), "t0630")
+
+	// No 30-minute reminder for Telegram: the day's message instead.
+	if act, _ := publishDue(tg("x", at(22, 16, 0)), at(22, 15, 30)); act != publishNone {
+		t.Errorf("Telegram post got the 30-minute reminder: %d", act)
+	}
+}
+
+func TestTelegramDayText(t *testing.T) {
+	post := func(title string, p time.Time) storage.Task {
+		return storage.Task{Type: storage.TaskTelegram, Title: title, PublishAt: p}
+	}
+	got := telegramDayText("@tg", []storage.Task{post("скидки", at(22, 16, 0)), post("кофе & вкус", at(22, 17, 0))}, moscow)
+	want := "🔔 @tg, посты в телеграме сегодня:\n• <b>16:00</b> «скидки»\n• <b>17:00</b> «кофе &amp; вкус»"
+	if got != want {
+		t.Errorf("two posts:\n%s\nwant\n%s", got, want)
+	}
+	got = telegramDayText("@tg", []storage.Task{post("афиша", at(22, 16, 0))}, moscow)
+	if want := "🔔 @tg, в 16:00 выложить пост в телеграме «афиша»"; got != want {
+		t.Errorf("one post: %q, want %q", got, want)
 	}
 }

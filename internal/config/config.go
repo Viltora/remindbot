@@ -40,12 +40,17 @@ type Config struct {
 }
 
 // Features are the scenarios that can be switched off in .env. Reminders
-// about publications and the material requests are always on.
+// about publications and the material requests and reminders are always on.
 type Features struct {
 	// SalesPoll is the evening sales report poll (FEATURE_SALES_POLL).
 	SalesPoll bool
 	// PublishQuestions is "published?" after a publication (FEATURE_PUBLISH_QUESTIONS).
 	PublishQuestions bool
+	// MaterialReplies is taking the material as a reply to the bot's request
+	// (FEATURE_MATERIAL_REPLIES): "material received", the reminder only if
+	// none came, its status in the reports. Off, the bot only asks and
+	// reminds.
+	MaterialReplies bool
 }
 
 // Redactor cuts the secrets out of text, e.g. log lines: the Telegram library
@@ -111,6 +116,7 @@ func Load() (Config, error) {
 	for name, dst := range map[string]*bool{
 		"FEATURE_SALES_POLL":        &cfg.Features.SalesPoll,
 		"FEATURE_PUBLISH_QUESTIONS": &cfg.Features.PublishQuestions,
+		"FEATURE_MATERIAL_REPLIES":  &cfg.Features.MaterialReplies,
 	} {
 		if *dst, err = flag(name); err != nil {
 			errs = append(errs, err)

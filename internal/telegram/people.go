@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -22,7 +23,7 @@ const (
 	cbPeoplePrefix = "ppl:"
 	cbPeopleList   = "list" // back to /people
 	cbPeopleOpen   = "open" // a person's card
-	cbPeopleRole   = "role" // arg: admin | sales | member
+	cbPeopleRole   = "role" // arg: admin | sales | telegram | member
 	cbPeopleRmOK   = "rmok" // removing the role, confirmed
 	cbPeopleLink   = "yg"   // arg: YouGile user ID, or cbPeopleNoYG
 	cbPeopleLinkOK = "ygok" // arg: YouGile user ID; taking it from another person, confirmed
@@ -48,13 +49,18 @@ var roleIcons = map[storage.Role]string{
 	storage.RoleSuperadmin: "👑",
 	storage.RoleAdmin:      "⭐",
 	storage.RoleSales:      "💼",
+	storage.RoleTelegram:   "✈️",
 	storage.RoleMember:     "👤",
 }
+
+// peopleRoles are the roles /people can set.
+var peopleRoles = []storage.Role{storage.RoleAdmin, storage.RoleSales, storage.RoleTelegram, storage.RoleMember}
 
 var roleNames = map[storage.Role]string{
 	storage.RoleSuperadmin: "суперадмин",
 	storage.RoleAdmin:      "админ",
 	storage.RoleSales:      "продажник",
+	storage.RoleTelegram:   "телеграм",
 	storage.RoleMember:     "без роли",
 }
 
@@ -178,9 +184,10 @@ func (t *Bot) personCard(ctx context.Context, tgID int64) (string, models.ReplyM
 			}
 			return models.InlineKeyboardButton{Text: label, CallbackData: peopleData(cbPeopleRole, tgID, string(r))}
 		}
-		rows = append(rows, []models.InlineKeyboardButton{
-			mark(storage.RoleAdmin, "⭐ Админ"), mark(storage.RoleSales, "💼 Продажник"), mark(storage.RoleMember, "👤 Без роли"),
-		})
+		rows = append(rows,
+			[]models.InlineKeyboardButton{mark(storage.RoleAdmin, "⭐ Админ"), mark(storage.RoleSales, "💼 Продажник")},
+			[]models.InlineKeyboardButton{mark(storage.RoleTelegram, "✈️ Телеграм"), mark(storage.RoleMember, "👤 Без роли")},
+		)
 	}
 	var row []models.InlineKeyboardButton
 	for i, a := range assignees {
@@ -277,7 +284,7 @@ func (t *Bot) onPeopleCallback(ctx context.Context, b *bot.Bot, update *models.U
 		if action == cbPeopleRmOK {
 			role = storage.RoleMember
 		}
-		if tgID == t.superadminID || (role != storage.RoleAdmin && role != storage.RoleSales && role != storage.RoleMember) {
+		if tgID == t.superadminID || !slices.Contains(peopleRoles, role) {
 			answer("Некорректная кнопка")
 			return
 		}

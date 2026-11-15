@@ -15,7 +15,10 @@ const (
 	RoleSuperadmin Role = "superadmin"
 	RoleAdmin      Role = "admin"
 	RoleSales      Role = "sales"
-	RoleMember     Role = "member"
+	// RoleTelegram posts to the Telegram channel: the bot tags them in the
+	// day's message about the Telegram posts.
+	RoleTelegram Role = "telegram"
+	RoleMember   Role = "member"
 )
 
 type User struct {

@@ -116,7 +116,9 @@ func New(ctx context.Context, cfg config.Config, store *storage.Store, log *slog
 	api.RegisterHandler(bot.HandlerTypeCallbackQueryData, cbPublishPrefix, bot.MatchTypePrefix, t.onPublishAnswer)
 	api.RegisterHandler(bot.HandlerTypeCallbackQueryData, "noop", bot.MatchTypeExact, t.onNoop)
 	// After the commands: a command sent as a reply is still a command.
-	api.RegisterHandlerMatchFunc(t.isReplyToBot, t.onTaskReply)
+	if cfg.Features.MaterialReplies {
+		api.RegisterHandlerMatchFunc(t.isReplyToBot, t.onTaskReply)
+	}
 
 	t.setupMenus(ctx)
 

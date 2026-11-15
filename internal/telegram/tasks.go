@@ -71,6 +71,11 @@ func (t *Bot) workTasksTick(ctx context.Context, _ *river.Job[tasksTickArgs]) er
 	t.forgetOldSkips(now)
 	// A failed step is logged and skipped: the next tick tries again unless
 	// the step was claimed.
+	if due := telegramDayDue(tasks, now); due != nil {
+		if err := t.sendTelegramDay(ctx, due); err != nil {
+			t.log.Error("telegram day", "err", err)
+		}
+	}
 	for _, task := range tasks {
 		t.logSkipped(task, now)
 		if step, due := materialDue(task, now); due {
@@ -132,14 +137,21 @@ func (t *Bot) materialText(ctx context.Context, task storage.Task, step int) (st
 		if err != nil {
 			return "", err
 		}
-		return "📎 " + addressed(who, fmt.Sprintf(
-			"%s %s «%s». Пришли готовый согласованный материал — файл или ссылку — <b>ответом на это сообщение</b>.",
-			whenText(p, time.Now().In(t.tz)), task.Type.Noun(), title)) +
+		how := "Пришли готовый согласованный материал."
+		if t.features.MaterialReplies {
+			how = "Пришли готовый согласованный материал — файл или ссылку — <b>ответом на это сообщение</b>."
+		}
+		return "📎 " + addressed(who, fmt.Sprintf("%s %s «%s». %s",
+			whenText(p, time.Now().In(t.tz)), task.Type.Noun(), title, how)) +
 			"\n💡 Не забудь про сторис и обложку.", nil
 	}
 	who, err := t.taskWho(ctx, task)
 	if err != nil {
 		return "", err
+	}
+	if !t.features.MaterialReplies {
+		return "📎 " + addressed(who, fmt.Sprintf("напоминание: пришли материал для %s «%s» (%s).",
+			task.Type.NounOf(), title, dayTime(p))), nil
 	}
 	return "📎 " + addressed(who, fmt.Sprintf(
 		"напоминание: жду материал для %s «%s» (%s) — файл или ссылку ответом на это сообщение.",
@@ -200,6 +212,80 @@ func (t *Bot) sendPublishStep(ctx context.Context, task storage.Task, act publis
 	return nil
 }
 
+// sendTelegramDay posts the day's Telegram posts to the publish chats,
+// tagging the people with the "telegram" role. Each post is claimed before
+// the send, so two ticks do not announce it twice; if nothing went, the
+// claims are given back and the next tick tries again.
+func (t *Bot) sendTelegramDay(ctx context.Context, due []storage.Task) error {
+	who, err := t.telegramWho(ctx)
+	if err != nil {
+		return err
+	}
+	chats, err := t.contentChats(ctx, storage.PurposePublish)
+	if err != nil {
+		return err
+	}
+	var claimed []storage.Task
+	for _, task := range due {
+		ok, err := t.store.AdvanceReminders(ctx, task.ID, task.RemindersSent, 1)
+		if err != nil {
+			t.log.Error("claim telegram post", "task", task.ID, "err", err)
+			continue
+		}
+		if ok {
+			claimed = append(claimed, task)
+		}
+	}
+	if len(claimed) == 0 {
+		return nil
+	}
+	text := telegramDayText(who, claimed, t.tz)
+	t.log.Info("telegram day", "posts", len(claimed), "first", claimed[0].PublishAt.In(t.tz).Format(time.DateTime))
+
+	if t.sendToChats(ctx, chats, text, nil, nil) {
+		return nil
+	}
+	// Nothing went: give every claim back, so the next tick tries again.
+	var errs []error
+	for _, task := range claimed {
+		errs = append(errs, t.store.ReleaseReminders(ctx, task.ID, task.RemindersSent, 1))
+	}
+	t.log.Warn("telegram day not delivered, will retry", "posts", len(claimed))
+	return errors.Join(errs...)
+}
+
+// telegramDayText is the day's message about the Telegram posts, given in
+// time order.
+func telegramDayText(who string, posts []storage.Task, tz *time.Location) string {
+	if len(posts) == 1 {
+		p := posts[0]
+		return "🔔 " + addressed(who, "в "+clock(p.PublishAt.In(tz))+" выложить "+p.Type.Noun()+" «"+html.EscapeString(p.Title)+"»")
+	}
+	var sb strings.Builder
+	sb.WriteString("🔔 " + addressed(who, "посты в телеграме сегодня:"))
+	for _, p := range posts {
+		fmt.Fprintf(&sb, "\n• <b>%s</b> «%s»", clock(p.PublishAt.In(tz)), html.EscapeString(p.Title))
+	}
+	return sb.String()
+}
+
+// telegramWho tags the people with the "telegram" role, or the primary admin
+// when nobody has it.
+func (t *Bot) telegramWho(ctx context.Context) (string, error) {
+	users, err := t.store.ListUsers(ctx, storage.RoleTelegram, 100)
+	if err != nil {
+		return "", err
+	}
+	if len(users) == 0 {
+		return t.adminToTag(ctx)
+	}
+	names := make([]string, len(users))
+	for i, u := range users {
+		names[i] = mention(u)
+	}
+	return strings.Join(names, ", "), nil
+}
+
 // logSkipped logs, once per task and publish time, a step the bot will not
 // take because its time has passed: so the log tells why nothing was sent.
 func (t *Bot) logSkipped(task storage.Task, now time.Time) {
@@ -236,15 +322,27 @@ func (t *Bot) forgetOldSkips(now time.Time) {
 // so that a reply can be matched to the task. It reports whether anything was
 // delivered; with no chats at all there is nothing to retry, so that counts.
 func (t *Bot) sendAboutTask(ctx context.Context, chats []int64, task storage.Task, kind, text string, markup models.ReplyMarkup) (delivered bool) {
+	return t.sendToChats(ctx, chats, text, markup, func(m *models.Message) {
+		if err := t.store.AddTaskMessage(ctx, m.Chat.ID, m.ID, task.ID, kind); err != nil {
+			t.log.Error("save task message", "task", task.ID, "err", err)
+		}
+	})
+}
+
+// sendToChats sends the message to the chats (in test mode, to the test
+// recipients) and calls sent, if given, for each message that went. It
+// reports whether anything was delivered; with no chats at all there is
+// nothing to retry, so that counts.
+func (t *Bot) sendToChats(ctx context.Context, chats []int64, text string, markup models.ReplyMarkup, sent func(*models.Message)) (delivered bool) {
 	if len(chats) == 0 {
-		t.log.Warn("no chats to send to; assign one in /chats", "task", task.ID, "text", preview(text))
+		t.log.Warn("no chats to send to; assign one in /chats", "text", preview(text))
 		return true
 	}
 	for _, chatID := range chats {
 		for _, m := range t.notify(ctx, chatID, text, markup) {
 			delivered = true
-			if err := t.store.AddTaskMessage(ctx, m.Chat.ID, m.ID, task.ID, kind); err != nil {
-				t.log.Error("save task message", "task", task.ID, "err", err)
+			if sent != nil {
+				sent(m)
 			}
 		}
 	}

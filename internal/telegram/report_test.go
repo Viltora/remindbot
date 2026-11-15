@@ -59,7 +59,7 @@ func TestTodayText(t *testing.T) {
 			today = append(today, x)
 		}
 	}
-	got := todayText(today, names, now, true)
+	got := todayText(today, names, now, true, true)
 	t.Log("\n" + got)
 	for _, want := range []string{
 		"📌 <b>Публикации · 4</b>",
@@ -85,7 +85,7 @@ func TestTodayText(t *testing.T) {
 	thu := at(22, 12, 30)
 	friday := storage.Task{ID: "f", Type: storage.TaskPost, Title: "осенние напитки", PublishAt: at(23, 11, 0),
 		Assignees: []string{"dj"}, Status: storage.PublishPending, MaterialStep: 1, MaterialStepAt: at(22, 12, 0)}
-	got = todayText([]storage.Task{friday}, names, thu, true)
+	got = todayText([]storage.Task{friday}, names, thu, true, true)
 	t.Log("\n" + got)
 	want := "📌 Публикаций сегодня нет.\n\n📎 <b>Материал на согласование</b> · запрос сегодня\n\n" +
 		"<b>пт 11:00</b> 🖼 Пост «осенние напитки»\n└ Вера · ⏳ ждём · напомню через час после запроса"
@@ -102,7 +102,7 @@ func TestWeekText(t *testing.T) {
 			week = append(week, x)
 		}
 	}
-	got := weekText(week, names, sales, now, true, true, true)
+	got := weekText(week, names, sales, now, true, true, true, true)
 	t.Log("\n" + got)
 	for _, want := range []string{
 		"📊 <b>Неделя пн 19.10 – вс 25.10</b>\n<i>на сб 24.10, 12:30</i>",
@@ -123,7 +123,7 @@ func TestWeekText(t *testing.T) {
 	if len(got) > 4096 {
 		t.Errorf("week report is %d bytes, more than a Telegram message", len(got))
 	}
-	if empty := weekText(nil, nil, nil, now, true, true, true); !strings.Contains(empty, "Публикаций на этой неделе нет") ||
+	if empty := weekText(nil, nil, nil, now, true, true, true, true); !strings.Contains(empty, "Публикаций на этой неделе нет") ||
 		!strings.Contains(empty, "Опросов на этой неделе не было") {
 		t.Errorf("empty week:\n%s", empty)
 	}
@@ -148,7 +148,7 @@ func TestPublishDataFitsTelegram(t *testing.T) {
 // past (answers given before are not shown), and there is no sales section.
 func TestWeekTextQuestionsOff(t *testing.T) {
 	tasks, names, _, now := sampleWeek()
-	got := weekText(tasks, names, nil, now, true, false, false)
+	got := weekText(tasks, names, nil, now, true, false, true, false)
 	for _, want := range []string{
 		"📱 Сторис 3 · 🖼 Посты и рилсы 5 · ✈️ Telegram 2\n\n⚠️ <b>Внимание</b>",
 		"<b>ср 21.10</b> · 1\n<blockquote>15:00 ✈️ «отель в горах» · —</blockquote>",
@@ -170,5 +170,28 @@ func TestWeekTextQuestionsOff(t *testing.T) {
 	}
 	if s := publishStatusText(past, now, true); !strings.HasPrefix(s, "⏳") {
 		t.Errorf("past task with questions on: %q", s)
+	}
+}
+
+// With the material replies off the bot only knows it asked: no "received",
+// no "not sent", nothing about the material needs attention.
+func TestReportsMaterialRepliesOff(t *testing.T) {
+	tasks, names, _, now := sampleWeek()
+	week := weekText(tasks, names, nil, now, true, false, false, false)
+	today := todayText(tasks, names, now, false, false)
+	t.Log("\n" + week + "\n\n" + today)
+	for _, want := range []string{"11:00 🖼 «осенние напитки» · Вера · 📎📨</blockquote>",
+		"<i>📎 материал (посты и рилсы): 🔕 не запрашивали · 📨 попросили</i>"} {
+		if !strings.Contains(week, want) {
+			t.Errorf("week: no %q", want)
+		}
+	}
+	for _, unwanted := range []string{"материал не прислали", "📎✅", "📎⚠️", "получен"} {
+		if strings.Contains(week, unwanted) {
+			t.Errorf("week: unexpected %q", unwanted)
+		}
+	}
+	if !strings.Contains(today, "└ 📎 материал: 📨 попросил · напомнил") || strings.Contains(today, "получен") {
+		t.Errorf("today: material status with the replies off:\n%s", today)
 	}
 }

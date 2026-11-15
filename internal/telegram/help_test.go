@@ -20,8 +20,12 @@ func TestHelpText(t *testing.T) {
 		}
 	}
 
-	on := helpText(config.Features{SalesPoll: true, PublishQuestions: true})
-	for _, want := range []string{"18:20, 18:40", "«Выложено?» [✅ Да] [❌ Нет], до 4 раз."} {
+	if strings.Contains(off, "ответом на сообщение бота. Через час") {
+		t.Error("all off: material replies described")
+	}
+	on := helpText(config.Features{SalesPoll: true, PublishQuestions: true, MaterialReplies: true})
+	for _, want := range []string{"18:20, 18:40", "«Выложено?» [✅ Да] [❌ Нет], до 4 раз.",
+		"После поста — «Выложено?»", "Материал — файл или ссылка ответом на сообщение бота."} {
 		if !strings.Contains(on, want) {
 			t.Errorf("all on: no %q", want)
 		}

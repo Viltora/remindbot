@@ -113,7 +113,8 @@ type Stats struct {
 	Users       int // everyone the bot knows, the superadmin included
 	Admins      int
 	Sales       int
-	Regular     int // no role: neither superadmin, admin nor sales
+	Telegram    int
+	Regular     int // no role
 	InGroups    int // seen in a group chat where the bot is now
 	ActiveChats int
 	// MaterialChats and PublishChats count the old all-content chats too.
@@ -130,6 +131,7 @@ func (s *Store) Stats(ctx context.Context, superadminID int64) (Stats, error) {
 		    (SELECT count(*) FROM users),
 		    (SELECT count(*) FROM users WHERE role = 'admin' AND tg_id <> $1),
 		    (SELECT count(*) FROM users WHERE role = 'sales' AND tg_id <> $1),
+		    (SELECT count(*) FROM users WHERE role = 'telegram' AND tg_id <> $1),
 		    (SELECT count(*) FROM users WHERE role = 'member' AND tg_id <> $1),
 		    (SELECT count(DISTINCT m.tg_id)
 		       FROM chat_members m JOIN chats c USING (chat_id)
@@ -140,7 +142,7 @@ func (s *Store) Stats(ctx context.Context, superadminID int64) (Stats, error) {
 		    (SELECT count(*) FROM chats WHERE active AND purpose = 'sales'),
 		    (SELECT count(*) FROM chats WHERE active AND purpose IS NULL)`,
 		superadminID).
-		Scan(&st.Users, &st.Admins, &st.Sales, &st.Regular, &st.InGroups,
+		Scan(&st.Users, &st.Admins, &st.Sales, &st.Telegram, &st.Regular, &st.InGroups,
 			&st.ActiveChats, &st.MaterialChats, &st.PublishChats, &st.SalesChats, &st.Unassigned)
 	return st, err
 }
