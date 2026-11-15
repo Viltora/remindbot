@@ -172,22 +172,8 @@ func (t *Bot) onAdminCallback(ctx context.Context, b *bot.Bot, update *models.Up
 		return
 	}
 
-	_, started, err := t.store.GetPerson(ctx, targetID)
-	if errors.Is(err, storage.ErrNotFound) {
-		answer("Пользователь не найден")
-		return
-	}
-	if err != nil {
-		t.log.Error("load user", "tg_id", targetID, "err", err)
-		answer("Ошибка, попробуй ещё раз")
-		return
-	}
-	// As in /people: a role is given only to someone the bot can write to.
-	if role != storage.RoleMember && !started {
-		answer("Сначала человек должен нажать «Начать» в личке с ботом")
-		return
-	}
-	answer(t.applyRole(ctx, targetID, role, cq.From.ID, started))
+	// Redrawn after any answer, a refusal too: a stale button goes away.
+	answer(t.applyRole(ctx, targetID, role, cq.From.ID))
 	t.refreshAdminsScreen(ctx, cq.Message)
 }
 
@@ -213,13 +199,27 @@ func (t *Bot) refreshAdminsScreen(ctx context.Context, m models.MaybeInaccessibl
 	}
 }
 
-// applyRole sets a person's role, updates their menu and tells them. It
-// returns the text for the button answer. started is whether the person has
-// pressed Start: only then can the bot write to them, so otherwise the
-// notice is skipped (a failed send would raise a false alert). The menu is
-// always synced: removing one cannot hurt. Callers allow giving a role only
-// to people who have started the bot.
-func (t *Bot) applyRole(ctx context.Context, targetID int64, role storage.Role, by int64, started bool) string {
+// applyRole sets a person's role, updates their menu and tells them, and
+// returns the text for the button answer. The rules for both /admins and
+// /people live here: a role is given only to someone who has pressed Start
+// (the bot must be able to write to them); taking one away needs nothing;
+// the current role is not set again. started is read right before the
+// write, so the notice matches the person's state.
+func (t *Bot) applyRole(ctx context.Context, targetID int64, role storage.Role, by int64) string {
+	u, started, err := t.store.GetPerson(ctx, targetID)
+	if errors.Is(err, storage.ErrNotFound) {
+		return "Пользователь не найден"
+	}
+	if err != nil {
+		t.log.Error("load user", "tg_id", targetID, "err", err)
+		return "Ошибка, попробуй ещё раз"
+	}
+	if roleOrMember(u) == role {
+		return "Роль уже такая"
+	}
+	if role != storage.RoleMember && !started {
+		return "Сначала человек должен нажать «Начать» в личке с ботом"
+	}
 	if err := t.store.SetRole(ctx, targetID, role); err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return "Пользователь не найден"
@@ -229,7 +229,8 @@ func (t *Bot) applyRole(ctx context.Context, targetID int64, role storage.Role, 
 	}
 	t.log.Info("role changed", "tg_id", targetID, "role", role, "by", by, "started", started)
 
-	// The user's private chat ID equals their user ID.
+	// The user's private chat ID equals their user ID. Someone who never
+	// pressed Start cannot be reached: send and syncMenu only log that.
 	t.syncMenu(ctx, targetID, role)
 	var notice, done string
 	switch role {

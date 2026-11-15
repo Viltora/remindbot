@@ -92,7 +92,9 @@ func (t *Bot) syncMenu(ctx context.Context, tgID int64, role storage.Role) {
 	default:
 		_, err = t.api.DeleteMyCommands(ctx, &bot.DeleteMyCommandsParams{Scope: scope})
 	}
-	if err != nil {
+	if isUnreachableUser(tgID, err) {
+		t.log.Warn("set command menu: the person has not started the bot", "tg_id", tgID, "role", role, "err", err)
+	} else if err != nil {
 		t.log.Error("set command menu", "tg_id", tgID, "role", role, "err", err)
 	}
 }

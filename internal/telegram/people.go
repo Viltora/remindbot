@@ -281,29 +281,24 @@ func (t *Bot) onPeopleCallback(ctx context.Context, b *bot.Bot, update *models.U
 			answer("Некорректная кнопка")
 			return
 		}
-		u, started, err := t.store.GetPerson(ctx, tgID)
-		if errors.Is(err, storage.ErrNotFound) {
-			answer("Пользователь не найден")
-			return
-		}
-		if err != nil {
-			t.log.Error("load user", "tg_id", tgID, "err", err)
-			answer("Ошибка, попробуй ещё раз")
-			return
-		}
-		if roleOrMember(u) == role {
-			answer("Роль уже такая")
-			return
-		}
-		// Only giving a role needs the bot to be able to write to the person;
-		// taking one away does not.
-		if role != storage.RoleMember && !started {
-			answer("Сначала человек должен нажать «Начать» в личке с ботом")
-			return
-		}
 		// Taking a role away asks first, as in /admins: an accidental tap
-		// could leave the team without the admin the bot tags.
+		// could leave the team without the admin the bot tags. The other
+		// rules are in applyRole.
 		if role == storage.RoleMember && action != cbPeopleRmOK {
+			u, err := t.store.GetUser(ctx, tgID)
+			if errors.Is(err, storage.ErrNotFound) {
+				answer("Пользователь не найден")
+				return
+			}
+			if err != nil {
+				t.log.Error("load user", "tg_id", tgID, "err", err)
+				answer("Ошибка, попробуй ещё раз")
+				return
+			}
+			if roleOrMember(u) == storage.RoleMember {
+				answer("Роль уже такая")
+				return
+			}
 			answer("")
 			t.editScreen(ctx, cq.Message, fmt.Sprintf("Снять роль «%s» у %s?", roleNames[roleOrMember(u)], displayName(u)),
 				&models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{
@@ -312,7 +307,7 @@ func (t *Bot) onPeopleCallback(ctx context.Context, b *bot.Bot, update *models.U
 				}}})
 			return
 		}
-		answer(t.applyRole(ctx, tgID, role, cq.From.ID, started))
+		answer(t.applyRole(ctx, tgID, role, cq.From.ID))
 	case cbPeopleLink, cbPeopleLinkOK:
 		ygID := arg
 		if ygID == cbPeopleNoYG {

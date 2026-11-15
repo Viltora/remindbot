@@ -28,6 +28,18 @@ const (
 	syncStaleAfter = 2 * time.Hour
 )
 
+// unreachableUser matches Telegram's answers for a person the bot cannot
+// write to privately: they never pressed Start, blocked the bot, or deleted
+// their account. That is not a failure of the bot: it is logged as a
+// warning, without an alert.
+var unreachableUser = regexp.MustCompile(`(?i)chat not found|bot was blocked by the user|bot can't initiate conversation|user is deactivated`)
+
+// isUnreachableUser reports whether err means the person chatID (a private
+// chat: positive ID; groups are negative) cannot be written to.
+func isUnreachableUser(chatID int64, err error) bool {
+	return chatID > 0 && err != nil && unreachableUser.MatchString(err.Error())
+}
+
 var telegramStatus = regexp.MustCompile(`error response from telegram for method \w+, (\d{3})`)
 
 // isTransient reports whether a Telegram API error is likely to pass by

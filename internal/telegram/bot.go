@@ -196,6 +196,10 @@ func (t *Bot) send(ctx context.Context, chatID int64, html string, markup models
 		ParseMode:   models.ParseModeHTML,
 		ReplyMarkup: markup,
 	})
+	if isUnreachableUser(chatID, err) {
+		t.log.Warn("send message: the person cannot be written to", "chat_id", chatID, "text", preview(html), "err", err)
+		return nil
+	}
 	if err != nil {
 		t.log.Error("send message", "chat_id", chatID, "text", preview(html), "err", err)
 		t.alertSendFailed(ctx, chatID, html, err)

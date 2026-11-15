@@ -81,3 +81,23 @@ func TestSyncStale(t *testing.T) {
 		}
 	}
 }
+
+func TestIsUnreachableUser(t *testing.T) {
+	for _, tc := range []struct {
+		chatID int64
+		err    error
+		want   bool
+	}{
+		{42, errors.New("error response from telegram for method sendMessage, Bad Request: chat not found"), true},
+		{42, errors.New("error response from telegram for method sendMessage, Forbidden: bot was blocked by the user"), true},
+		{42, errors.New("error response from telegram for method sendMessage, Forbidden: bot can't initiate conversation with a user"), true},
+		{42, errors.New("error response from telegram for method sendMessage, Forbidden: user is deactivated"), true},
+		{-100123, errors.New("error response from telegram for method sendMessage, Bad Request: chat not found"), false}, // a group is a real problem
+		{42, errors.New("error response from telegram for method sendMessage, 502 Bad Gateway"), false},
+		{42, nil, false},
+	} {
+		if got := isUnreachableUser(tc.chatID, tc.err); got != tc.want {
+			t.Errorf("isUnreachableUser(%d, %v) = %v, want %v", tc.chatID, tc.err, got, tc.want)
+		}
+	}
+}
