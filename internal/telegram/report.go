@@ -1,7 +1,6 @@
 package telegram
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"html"
@@ -126,17 +125,47 @@ func tally(counts []int, labels []stateLabel, named bool) string {
 	return strings.Join(parts, " · ")
 }
 
-// todayGroups are how /today splits the publications: Instagram stories,
+// kindGroups are how the reports split the publications: Instagram stories,
 // Instagram posts and reels, and Telegram.
-type todayGroup struct {
+type kindGroup struct {
 	title string
 	types []storage.TaskType
 }
 
-var todayGroups = []todayGroup{
+var kindGroups = []kindGroup{
 	{"📱 Сторис", []storage.TaskType{storage.TaskStories}},
 	{"🖼 Посты и рилсы", []storage.TaskType{storage.TaskPost, storage.TaskReels}},
 	{"✈️ Telegram", []storage.TaskType{storage.TaskTelegram}},
+}
+
+type taskGroup struct {
+	title string
+	tasks []storage.Task
+}
+
+// groupByKind splits tasks by kindGroups, keeping their order; empty groups
+// are left out. A type in no group (should YouGile get a new column) gets a
+// group of its own at the end, so nothing is lost.
+func groupByKind(tasks []storage.Task) []taskGroup {
+	groups := slices.Clone(kindGroups)
+	for _, task := range tasks {
+		if !slices.ContainsFunc(groups, func(g kindGroup) bool { return slices.Contains(g.types, task.Type) }) {
+			groups = append(groups, kindGroup{task.Type.Label(), []storage.TaskType{task.Type}})
+		}
+	}
+	var out []taskGroup
+	for _, g := range groups {
+		var in []storage.Task
+		for _, task := range tasks {
+			if slices.Contains(g.types, task.Type) {
+				in = append(in, task)
+			}
+		}
+		if len(in) > 0 {
+			out = append(out, taskGroup{g.title, in})
+		}
+	}
+	return out
 }
 
 // todayText is the publications part of /today, from the tasks published
@@ -164,29 +193,9 @@ func todayText(tasks []storage.Task, names map[string]string, now time.Time, ask
 		}
 		fmt.Fprintf(&sb, "📌 <b>Публикации · %d</b>\n%s\n", len(today), tally(counts[:], pubLabels[:], true))
 		// Each group in a quote: the bar on its left shows where one ends.
-		// A type in no group (should YouGile get a new column) goes last.
-		grouped := map[storage.TaskType]bool{}
-		groups := slices.Clone(todayGroups)
-		for _, g := range groups {
-			for _, ty := range g.types {
-				grouped[ty] = true
-			}
-		}
-		var other []storage.TaskType
-		for _, task := range today {
-			if !grouped[task.Type] && !slices.Contains(other, task.Type) {
-				other = append(other, task.Type)
-			}
-		}
-		for _, ty := range other {
-			groups = append(groups, todayGroup{ty.Label(), []storage.TaskType{ty}})
-		}
-		for _, g := range groups {
+		for _, g := range groupByKind(today) {
 			var items []string
-			for _, task := range today {
-				if !slices.Contains(g.types, task.Type) {
-					continue
-				}
+			for _, task := range g.tasks {
 				item := fmt.Sprintf("<b>%s</b> %s\n└ %s · %s", clock(task.PublishAt.In(now.Location())),
 					taskTitle(task), whoOf(task, names), publishStatusText(task, now, asks))
 				if task.Type.NeedsMaterial() {
@@ -194,9 +203,7 @@ func todayText(tasks []storage.Task, names map[string]string, now time.Time, ask
 				}
 				items = append(items, item)
 			}
-			if len(items) > 0 {
-				fmt.Fprintf(&sb, "\n<b>%s · %d</b>\n<blockquote>%s</blockquote>\n", g.title, len(items), strings.Join(items, "\n\n"))
-			}
+			fmt.Fprintf(&sb, "\n<b>%s · %d</b>\n<blockquote>%s</blockquote>\n", g.title, len(items), strings.Join(items, "\n\n"))
 		}
 	}
 	if len(asked) > 0 {
@@ -209,8 +216,8 @@ func todayText(tasks []storage.Task, names map[string]string, now time.Time, ask
 	return strings.TrimSuffix(sb.String(), "\n")
 }
 
-// weekText is /week: the publications of the week from Monday, those done
-// so far and those ahead, and the sales reports (none when the poll is off,
+// weekText is /week: the publications of the week from Monday, what needs
+// attention and the week day by day, and the sales reports (none when the poll is off,
 // sales == nil and salesOn false).
 func weekText(tasks []storage.Task, names map[string]string, sales []storage.SalesReport, now time.Time, yougile, asks, salesOn bool) string {
 	start := startOfWeek(now)
@@ -234,108 +241,119 @@ func weekText(tasks []storage.Task, names map[string]string, sales []storage.Sal
 	return strings.TrimSuffix(sb.String(), "\n")
 }
 
+// weekTasksText is the publications part of /week: what needs attention,
+// then the week day by day, one short line per publication.
 func weekTasksText(tasks []storage.Task, names map[string]string, now, start time.Time, asks bool) string {
-	type counts = [pubStates]int
-	var total counts
-	var byDay [7]counts
-	byType := map[storage.TaskType]*counts{}
-	byWho := map[string]*counts{}
-	var answeredOn [publishAttempts + 1]int
-	var material [matStates]int
-	materialTasks := 0
-	add := func(m map[string]*counts, key string, st pubState) {
-		if m[key] == nil {
-			m[key] = &counts{}
-		}
-		m[key][st]++
-	}
-
-	for _, task := range tasks {
-		st := pubStateOf(task, now, asks)
-		total[st]++
-		if d := daysBetween(start, task.PublishAt.In(now.Location())); d >= 0 && d < 7 {
-			byDay[d][st]++
-		}
-		if byType[task.Type] == nil {
-			byType[task.Type] = &counts{}
-		}
-		byType[task.Type][st]++
-		if len(task.Assignees) == 0 {
-			add(byWho, "", st)
-		}
-		for _, id := range task.Assignees {
-			add(byWho, cmp.Or(names[id], "исполнитель из YouGile"), st)
-		}
-		if st == pubDone && task.AnsweredAttempt >= 1 && task.AnsweredAttempt <= publishAttempts {
-			answeredOn[task.AnsweredAttempt]++
-		}
-		if task.Type.NeedsMaterial() {
-			material[matStateOf(task, now)]++
-			materialTasks++
-		}
-	}
-	line := func(c *counts) string { return tally(c[:], pubLabels[:], false) }
-	sum := func(c *counts) (n int) {
-		for _, v := range c {
-			n += v
-		}
-		return n
-	}
-
+	loc := now.Location()
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "📌 <b>Публикации · %d</b>\n%s\n", len(tasks), tally(total[:], pubLabels[:], true))
-	if answeredOn != [publishAttempts + 1]int{} {
-		var parts []string
-		for a := 1; a <= publishAttempts; a++ {
-			parts = append(parts, fmt.Sprintf("%d-й — %d", a, answeredOn[a]))
+
+	var kinds []string
+	for _, g := range groupByKind(tasks) {
+		kinds = append(kinds, fmt.Sprintf("%s %d", g.title, len(g.tasks)))
+	}
+	fmt.Fprintf(&sb, "📌 <b>Публикации · %d</b>\n%s\n", len(tasks), strings.Join(kinds, " · "))
+	if asks {
+		var counts [pubStates]int
+		for _, task := range tasks {
+			counts[pubStateOf(task, now, asks)]++
 		}
-		sb.WriteString("«Да» с попытки: " + strings.Join(parts, " · ") + "\n")
+		sb.WriteString(tally(counts[:], pubLabels[:], true) + "\n")
 	}
 
-	sb.WriteString("\n<b>По дням</b>\n")
-	for d := range byDay {
-		day := formatDay(start.AddDate(0, 0, d))
-		if sameDay(start.AddDate(0, 0, d), now) {
-			day = "<b>" + day + "</b>"
+	// What needs attention: material not sent, and with the questions on,
+	// publications not done or not answered for.
+	var attention []string
+	ref := func(task storage.Task) string {
+		return fmt.Sprintf("%s %s «%s» · %s", dayTime(task.PublishAt.In(loc)), typeIcon(task.Type),
+			html.EscapeString(shorten(task.Title, weekTitleLen)), whoOf(task, names))
+	}
+	noAssignee := 0
+	for _, task := range tasks {
+		if task.Type.NeedsMaterial() && matStateOf(task, now) == matMissed {
+			attention = append(attention, "• 📎 материал не прислали: "+ref(task))
 		}
-		if n := sum(&byDay[d]); n > 0 {
-			fmt.Fprintf(&sb, "%s · %d — %s\n", day, n, line(&byDay[d]))
-		} else {
-			fmt.Fprintf(&sb, "%s — нет\n", day)
+		if asks {
+			switch pubStateOf(task, now, asks) {
+			case pubNotDone:
+				attention = append(attention, "• ❌ не выложено: "+ref(task))
+			case pubNoAnswer:
+				attention = append(attention, "• ⚠️ нет ответа «выложено?»: "+ref(task))
+			}
 		}
+		if len(task.Assignees) == 0 {
+			noAssignee++
+		}
+	}
+	if noAssignee > 0 {
+		attention = append(attention, fmt.Sprintf("• без исполнителя: %d — бот тегает основного админа", noAssignee))
+	}
+	if len(attention) > 0 {
+		sb.WriteString("\n⚠️ <b>Внимание</b>\n" + strings.Join(attention, "\n") + "\n")
 	}
 
-	sb.WriteString("\n<b>По типам</b>\n")
-	for _, tt := range storage.TaskTypes {
-		if c := byType[tt]; c != nil {
-			fmt.Fprintf(&sb, "%s · %d — %s\n", tt.Label(), sum(c), line(c))
+	sb.WriteString("\n")
+	var matSeen [matStates]bool
+	for d := range 7 {
+		day := start.AddDate(0, 0, d)
+		var lines []string
+		for _, task := range tasks {
+			p := task.PublishAt.In(loc)
+			if !sameDay(p, day) {
+				continue
+			}
+			line := fmt.Sprintf("%s %s «%s» · %s", clock(p), typeIcon(task.Type),
+				html.EscapeString(shorten(task.Title, weekTitleLen)), shortWho(task, names))
+			if task.Type.NeedsMaterial() {
+				st := matStateOf(task, now)
+				matSeen[st] = true
+				line += " · 📎" + matLabels[st].icon
+			}
+			if asks {
+				line += " · " + pubLabels[pubStateOf(task, now, asks)].icon
+			}
+			lines = append(lines, line)
+		}
+		label := formatDay(day)
+		if sameDay(day, now) {
+			label += " · сегодня"
+		}
+		if len(lines) == 0 {
+			fmt.Fprintf(&sb, "%s — нет\n", label)
+			continue
+		}
+		fmt.Fprintf(&sb, "<b>%s</b> · %d\n<blockquote>%s</blockquote>\n", label, len(lines), strings.Join(lines, "\n"))
+	}
+	// The material icons explained, those that occur.
+	var legend []string
+	for st, seen := range matSeen {
+		if seen {
+			legend = append(legend, matLabels[st].icon+" "+matLabels[st].name)
 		}
 	}
-
-	sb.WriteString("\n<b>По исполнителям</b>\n")
-	who := make([]string, 0, len(byWho))
-	for name := range byWho {
-		who = append(who, name)
-	}
-	// The busiest first; tasks without an assignee last.
-	slices.SortFunc(who, func(a, b string) int {
-		if (a == "") != (b == "") {
-			return cmp.Compare(b, a)
-		}
-		return cmp.Or(cmp.Compare(sum(byWho[b]), sum(byWho[a])), cmp.Compare(a, b))
-	})
-	for _, name := range who {
-		label := html.EscapeString(name)
-		if name == "" {
-			label = "без исполнителя → основной админ"
-		}
-		fmt.Fprintf(&sb, "%s · %d — %s\n", label, sum(byWho[name]), line(byWho[name]))
-	}
-
-	if materialTasks > 0 {
-		fmt.Fprintf(&sb, "\n📎 <b>Материал · %d</b> (посты и рилсы)\n%s\n", materialTasks, tally(material[:], matLabels[:], true))
+	if len(legend) > 0 {
+		sb.WriteString("<i>📎 материал (посты и рилсы): " + strings.Join(legend, " · ") + "</i>\n")
 	}
 	return sb.String()
+}
+
+// weekTitleLen keeps a week of publications within one Telegram message.
+const weekTitleLen = 40
+
+// typeIcon is the icon of the type's Label: "📱".
+func typeIcon(t storage.TaskType) string {
+	l := t.Label()
+	if i := strings.IndexByte(l, ' '); i > 0 {
+		return l[:i]
+	}
+	return l
+}
+
+// shortWho is whoOf for the week's lines: "—" for no assignee.
+func shortWho(task storage.Task, names map[string]string) string {
+	if who := joinNames(task.Assignees, names); who != "" {
+		return who
+	}
+	return "—"
 }
 
 var salesLabels = map[storage.SalesStatus]stateLabel{
