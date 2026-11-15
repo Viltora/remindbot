@@ -199,8 +199,18 @@ func (t *Bot) refreshAdminsScreen(ctx context.Context, m models.MaybeInaccessibl
 }
 
 // applyRole sets a person's role, updates their menu and tells them. It
-// returns the text for the button answer.
+// returns the text for the button answer. Someone who never pressed Start
+// cannot be written to: their menu and the notice are skipped, so the
+// failed send does not raise a false alert.
 func (t *Bot) applyRole(ctx context.Context, targetID int64, role storage.Role, by int64) string {
+	_, started, err := t.store.GetPerson(ctx, targetID)
+	if errors.Is(err, storage.ErrNotFound) {
+		return "Пользователь не найден"
+	}
+	if err != nil {
+		t.log.Error("load user", "tg_id", targetID, "err", err)
+		return "Ошибка, попробуй ещё раз"
+	}
 	if err := t.store.SetRole(ctx, targetID, role); err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			return "Пользователь не найден"
@@ -208,7 +218,13 @@ func (t *Bot) applyRole(ctx context.Context, targetID int64, role storage.Role, 
 		t.log.Error("set role", "tg_id", targetID, "err", err)
 		return "Ошибка, попробуй ещё раз"
 	}
-	t.log.Info("role changed", "tg_id", targetID, "role", role, "by", by)
+	t.log.Info("role changed", "tg_id", targetID, "role", role, "by", by, "started", started)
+	if !started {
+		if role == storage.RoleMember {
+			return "Роль снята"
+		}
+		return "Роль назначена"
+	}
 
 	// The user's private chat ID equals their user ID.
 	t.syncMenu(ctx, targetID, role)

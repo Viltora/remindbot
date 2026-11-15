@@ -18,11 +18,7 @@ type YouGilePerson struct {
 // Assignees returns the YouGile people assigned to the tracked tasks, by
 // name, with their linked Telegram users.
 func (s *Store) Assignees(ctx context.Context) ([]YouGilePerson, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT y.id, y.real_name,
-		       COALESCE(u.tg_id, 0), COALESCE(u.username, ''), COALESCE(u.first_name, ''), COALESCE(u.role, '')
-		FROM yougile_users y
-		LEFT JOIN users u ON u.tg_id = y.tg_id
+	rows, err := s.pool.Query(ctx, personSelect+`
 		WHERE y.id IN (SELECT unnest(assignees) FROM tasks)
 		ORDER BY lower(y.real_name), y.id`)
 	if err != nil {
@@ -30,6 +26,14 @@ func (s *Store) Assignees(ctx context.Context) ([]YouGilePerson, error) {
 	}
 	return pgx.CollectRows(rows, scanPerson)
 }
+
+// personSelect reads YouGile people with their linked Telegram users, in
+// the order scanPerson expects; callers add WHERE and ORDER BY.
+const personSelect = `
+	SELECT y.id, y.real_name,
+	       COALESCE(u.tg_id, 0), COALESCE(u.username, ''), COALESCE(u.first_name, ''), COALESCE(u.role, '')
+	FROM yougile_users y
+	LEFT JOIN users u ON u.tg_id = y.tg_id`
 
 func scanPerson(row pgx.CollectableRow) (YouGilePerson, error) {
 	var p YouGilePerson
@@ -125,10 +129,7 @@ func (s *Store) GetPerson(ctx context.Context, tgID int64) (u User, started bool
 // YouGileOwner returns the YouGile person ygID with the Telegram user linked
 // to it (User.TgID 0 = none).
 func (s *Store) YouGileOwner(ctx context.Context, ygID string) (YouGilePerson, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT y.id, y.real_name,
-		       COALESCE(u.tg_id, 0), COALESCE(u.username, ''), COALESCE(u.first_name, ''), COALESCE(u.role, '')
-		FROM yougile_users y LEFT JOIN users u ON u.tg_id = y.tg_id
+	rows, err := s.pool.Query(ctx, personSelect+`
 		WHERE y.id = $1`, ygID)
 	if err != nil {
 		return YouGilePerson{}, err

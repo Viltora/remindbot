@@ -100,8 +100,8 @@ const (
 )
 
 // publishDue returns what is due at now about publishing the task. For
-// publishRemind n is the reminder (1 an hour before, 2 half an hour before),
-// for publishAsk the attempt.
+// publishRemind n is the reminder's number in publishReminders (now only 1,
+// half an hour before), for publishAsk the attempt.
 func publishDue(task storage.Task, now time.Time) (act publishAction, n int) {
 	if task.Status != storage.PublishPending {
 		return publishNone, 0

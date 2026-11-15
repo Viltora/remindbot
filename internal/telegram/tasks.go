@@ -165,18 +165,16 @@ func (t *Bot) sendPublishStep(ctx context.Context, task storage.Task, act publis
 	if err != nil {
 		return err
 	}
-	step, text, markup := "reminder", "🔔 "+addressed(who, "в "+clock(p)+" выложить "+what), models.ReplyMarkup(nil)
-	switch {
-	case act == publishAsk:
+	var step, text string
+	var markup models.ReplyMarkup
+	var claimed bool
+	if act == publishAsk {
 		step, markup = "question", publishButtons(task)
 		text = fmt.Sprintf("❓ %s\n<i>Попытка %d из %d</i>",
 			addressed(who, what+" ("+clock(p)+") "+task.Type.Published()+"?"), n, publishAttempts)
-	}
-
-	var claimed bool
-	if act == publishAsk {
 		claimed, err = t.store.AdvancePublishAttempt(ctx, task.ID, task.Attempts)
 	} else {
+		step, text = "reminder", "🔔 "+addressed(who, "в "+clock(p)+" выложить "+what)
 		claimed, err = t.store.AdvanceReminders(ctx, task.ID, task.RemindersSent, n)
 	}
 	if err != nil || !claimed {

@@ -45,14 +45,7 @@ func (s *Store) TouchUser(ctx context.Context, u User) (created bool, err error)
 }
 
 func (s *Store) GetUser(ctx context.Context, tgID int64) (User, error) {
-	var u User
-	err := s.pool.QueryRow(ctx, `
-		SELECT tg_id, COALESCE(username, ''), first_name, role
-		FROM users WHERE tg_id = $1`, tgID).
-		Scan(&u.TgID, &u.Username, &u.FirstName, &u.Role)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return User{}, ErrNotFound
-	}
+	u, _, err := s.GetPerson(ctx, tgID)
 	return u, err
 }
 

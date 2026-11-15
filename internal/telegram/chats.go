@@ -48,14 +48,22 @@ func (t *Bot) onBotAdded(ctx context.Context, upd *models.ChatMemberUpdated) {
 		return
 	}
 
-	// Only the superadmin is asked, so there is one answer (admins can change
-	// it later in /chats).
-	if t.superadminID == 0 {
-		return
+	// The superadmin is asked, so there is one answer; the admin who added
+	// the bot is told, and can set the role in /chats. With no superadmin
+	// configured, the admin is asked instead.
+	title := html.EscapeString(chat.Title)
+	if t.superadminID != 0 {
+		t.send(ctx, t.superadminID, fmt.Sprintf("✅ %s добавил бота в чат «%s».\nДля чего этот чат?",
+			displayName(by), title), purposeButtons(chat.ID))
 	}
-	text := fmt.Sprintf("✅ %s добавил бота в чат «%s».\nДля чего этот чат?",
-		displayName(by), html.EscapeString(chat.Title))
-	t.send(ctx, t.superadminID, text, purposeButtons(chat.ID))
+	switch {
+	case by.TgID == t.superadminID:
+	case t.superadminID == 0:
+		t.send(ctx, by.TgID, fmt.Sprintf("✅ Бот добавлен в чат «%s».\nДля чего этот чат?", title), purposeButtons(chat.ID))
+	default:
+		t.send(ctx, by.TgID, fmt.Sprintf(
+			"✅ Бот добавлен в чат «%s».\nРоль чату назначит суперадмин — или задай её сам в /chats.", title), nil)
+	}
 }
 
 func (t *Bot) onChats(ctx context.Context, _ *bot.Bot, update *models.Update) {
