@@ -88,7 +88,7 @@ func TestTodayText(t *testing.T) {
 	got = todayText([]storage.Task{friday}, names, thu, true, true)
 	t.Log("\n" + got)
 	want := "📌 Публикаций сегодня нет.\n\n📎 <b>Материал на согласование</b> · запрос сегодня\n\n" +
-		"<b>пт 11:00</b> 🖼 Пост «осенние напитки»\n└ Вера · ⏳ ждём · напомню через час после запроса"
+		"<b>пт 11:00</b> 🖼 Пост «осенние напитки»\n└ Вера · ⏳ ждём"
 	if got != want {
 		t.Errorf("Thursday:\n%s\nwant\n%s", got, want)
 	}
@@ -191,7 +191,7 @@ func TestReportsMaterialRepliesOff(t *testing.T) {
 			t.Errorf("week: unexpected %q", unwanted)
 		}
 	}
-	if !strings.Contains(today, "└ 📎 материал: 📨 попросил · напомнил") || strings.Contains(today, "получен") {
+	if !strings.Contains(today, "└ 📎 материал: 📨 попросил\n") || strings.Contains(today, "получен") || strings.Contains(today, "напомню через час") {
 		t.Errorf("today: material status with the replies off:\n%s", today)
 	}
 }

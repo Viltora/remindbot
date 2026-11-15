@@ -27,7 +27,7 @@ func helpText(f config.Features) string {
 	}
 	mat := helpMaterialReplies
 	if !f.MaterialReplies {
-		mat = " Через час одно напоминание, админа не тегает."
+		mat = " Один раз, без напоминаний; админа не тегает."
 	}
 	off := helpOff(f)
 	return strings.NewReplacer("{sales}", sales, "{asks}", asks, "{mat}", mat, "{tgasks}", tgAsks, "{off}", off).Replace(helpTemplate)
@@ -58,7 +58,7 @@ const helpSalesPoll = `<b>Опрос продажников</b> (пн–пт)
 
 `
 
-const helpMaterialReplies = ` Материал — файл или ссылка ответом на сообщение бота. Через час одно напоминание, если не прислали; админа не тегает.`
+const helpMaterialReplies = ` Материал — файл или ссылка ответом на сообщение бота. Один раз, без напоминаний; админа не тегает.`
 
 const helpPublishAsk = `; через 30 мин после публикации «Выложено?» [✅ Да] [❌ Нет], до 4 раз.`
 

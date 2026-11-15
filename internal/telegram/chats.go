@@ -96,7 +96,7 @@ func (t *Bot) chatsScreen(ctx context.Context) (string, models.ReplyMarkup, erro
 		rows = append(rows, []models.InlineKeyboardButton{{Text: "«" + c.Title + "»:", CallbackData: "noop"}})
 		rows = append(rows, purposeButtons(c.ID).InlineKeyboard...)
 	}
-	sb.WriteString("\n\n📎 Материалы — «пришли материал» за сутки и напоминание через час." +
+	sb.WriteString("\n\n📎 Материалы — «пришли материал» за сутки, один раз." +
 		"\n🔔 Выкладка — напоминания о публикации и контент-план по понедельникам." +
 		"\n💼 Продажи — напоминание заполнить отчёт (без чата — в личку).")
 	return sb.String(), &models.InlineKeyboardMarkup{InlineKeyboard: rows}, nil

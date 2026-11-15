@@ -437,23 +437,28 @@ func publishStatusText(task storage.Task, now time.Time, asks bool) string {
 	return "🔕 не спрашивали"
 }
 
+// reminderNote says whether the material reminder went, if there is one.
+func reminderNote(task storage.Task) string {
+	switch {
+	case materialReminders == 0:
+		return ""
+	case task.MaterialStep >= materialLastStep:
+		return " · напомнил"
+	}
+	return " · напомню через час"
+}
+
 // materialStatusText says where the material stands, for /today.
 func materialStatusText(task storage.Task, now time.Time, replies bool) string {
 	switch matStateOf(task, now, replies) {
 	case matAsked:
-		if task.MaterialStep >= materialLastStep {
-			return "📨 попросил · напомнил"
-		}
-		return "📨 попросил · напомню через час"
+		return "📨 попросил" + reminderNote(task)
 	case matReceived:
 		return "✅ получен"
 	case matMissed:
 		return "⚠️ не прислали"
 	case matWaiting:
-		if task.MaterialStep >= materialLastStep {
-			return "⏳ ждём · напомнил"
-		}
-		return "⏳ ждём · напомню через час после запроса"
+		return "⏳ ждём" + reminderNote(task)
 	case matAhead:
 		if r := materialRequestTime(task.PublishAt.In(now.Location())); now.Before(r) {
 			return "🕓 запросим " + whenText(r, now)

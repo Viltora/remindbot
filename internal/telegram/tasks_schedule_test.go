@@ -61,12 +61,11 @@ func TestMaterialDue(t *testing.T) {
 		t.Error("materialRequestMissed disagrees with materialDue")
 	}
 
+	// Since 16.11.2026 the material is asked for once: no reminder.
 	asked := post
 	asked.MaterialStep, asked.MaterialStepAt = 1, at(19, 15, 0)
-	check("reminder not yet", asked, at(19, 15, 59), 0, false)
-	check("reminder an hour later", asked, at(19, 16, 0), 2, true)
-	asked.MaterialStepAt = at(19, 15, 0).Add(43 * time.Second)
-	check("reminder on the minute", asked, at(19, 16, 0), 2, true)
+	check("no reminder an hour later", asked, at(19, 16, 0), 0, false)
+	check("no reminder later", asked, at(19, 23, 0), 0, false)
 
 	done := post
 	done.MaterialStep, done.MaterialStepAt = materialLastStep, at(19, 16, 0)
@@ -82,10 +81,6 @@ func TestMaterialDue(t *testing.T) {
 	check("from the publication on", post, at(20, 15, 0), 0, false)
 	check("stories need no material", storage.Task{Type: storage.TaskStories, PublishAt: at(20, 15, 0)}, at(19, 15, 0), 0, false)
 
-	late := post
-	late.MaterialStep, late.MaterialStepAt = 1, at(19, 21, 30)
-	check("reminder in quiet hours waits", late, at(19, 22, 30), 0, false)
-	check("reminder after quiet hours", late, at(20, 6, 0), 2, true)
 }
 
 func TestPublishDue(t *testing.T) {

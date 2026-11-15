@@ -15,8 +15,9 @@ import (
 //	P−24h       request; if that is a weekend, on Friday at the same time.
 //	            The material is due a day ahead, so a request later than
 //	            materialRequestGrace is not sent at all.
-//	+1h         one reminder if there is no material; the admin is not told
-//	            nothing is sent from P on
+//	+1h         a reminder if there is no material (materialReminders; none
+//	            since 16.11.2026); the admin is not told. Nothing is sent
+//	            from P on
 //
 // Publishing:
 //
@@ -30,7 +31,9 @@ import (
 // moved later in the day gets a message of its own the same way.
 const (
 	materialLead      = 24 * time.Hour
-	materialReminders = 1
+	// Since 16.11.2026 the material is asked for once, without reminders
+	// (it was one, an hour after the request).
+	materialReminders = 0
 	materialGap       = time.Hour
 	// The last material step: the request is step 1, the reminders follow.
 	materialLastStep = materialReminders + 1
