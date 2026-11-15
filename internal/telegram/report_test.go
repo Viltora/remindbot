@@ -145,17 +145,17 @@ func TestPublishDataFitsTelegram(t *testing.T) {
 	}
 }
 
-// With "published?" and the sales poll off, a passed publication is just
-// past, answers given before stay, and there is no sales section.
+// With "published?" and the sales poll off, a publication is only ahead or
+// past (answers given before are not shown), and there is no sales section.
 func TestWeekTextQuestionsOff(t *testing.T) {
 	tasks, names, _, now := sampleWeek()
 	got := weekText(tasks, names, nil, now, true, false, false)
-	for _, want := range []string{"ср 21.10 · 1 — 🕘 1", "📱 Сторис · 3 — ✅ 2 · ⚠️ 1"} {
+	for _, want := range []string{"🕓 впереди 4 · 🕘 время прошло 6", "ср 21.10 · 1 — 🕘 1", "📱 Сторис · 3 — 🕘 3"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in\n%s", want, got)
 		}
 	}
-	for _, unwanted := range []string{"🔕 не спрашивали", "— 🔕 1", "Отчёты продажников"} {
+	for _, unwanted := range []string{"✅ выложено", "— ✅", "⚠️ нет ответа", "«Да» с попытки", "🔕 не спрашивали", "Отчёты продажников"} {
 		if strings.Contains(got, unwanted) {
 			t.Errorf("unexpected %q in\n%s", unwanted, got)
 		}

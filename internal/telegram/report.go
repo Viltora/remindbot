@@ -43,8 +43,16 @@ var pubLabels = [pubStates]stateLabel{
 }
 
 // pubStateOf says where the publication stands; asks tells whether the bot
-// asks "published?" (FEATURE_PUBLISH_QUESTIONS).
+// asks "published?" (FEATURE_PUBLISH_QUESTIONS). With the questions off a
+// publication is only ahead or past: answers given while they were on are
+// not shown, so the reports do not look as if the bot still asked.
 func pubStateOf(task storage.Task, now time.Time, asks bool) pubState {
+	if !asks {
+		if now.Before(task.PublishAt) {
+			return pubAhead
+		}
+		return pubPassed
+	}
 	switch task.Status {
 	case storage.PublishDone:
 		return pubDone
