@@ -14,16 +14,21 @@ import (
 	"remindbot/internal/storage"
 )
 
-// Callback data for chat purposes: "chat:<chat_id>:content|sales|none".
+// Callback data for the chats screens: "chat:<chat_id>:<purpose>|none" sets
+// the purpose, "chat:<chat_id>:open" opens one chat, "chat:0:list" goes
+// back to the list.
 const (
 	cbChatPrefix = "chat:"
 	cbChatNone   = "none"
+	cbChatOpen   = "open"
+	cbChatList   = "list"
 )
 
 var purposeLabels = map[storage.ChatPurpose]string{
 	storage.PurposeMaterial: "📎 Материалы",
 	storage.PurposePublish:  "🔔 Выкладка",
 	storage.PurposeSales:    "💼 Продажи",
+	storage.PurposeTelegram: "✈️ Телеграм",
 	// The old single content chat: still works, gets both; not offered anew.
 	storage.PurposeContent: "📝 Контент (материалы + выкладка)",
 	storage.PurposeNone:    "— не назначено",
@@ -78,6 +83,8 @@ func (t *Bot) onChats(ctx context.Context, _ *bot.Bot, update *models.Update) {
 	t.send(ctx, update.Message.Chat.ID, text, markup)
 }
 
+// chatsScreen lists the chats with their purpose, a button per chat; the
+// purpose is changed in the chat's own screen, so the list stays short.
 func (t *Bot) chatsScreen(ctx context.Context) (string, models.ReplyMarkup, error) {
 	chats, err := t.store.ListChats(ctx)
 	if err != nil {
@@ -93,24 +100,51 @@ func (t *Bot) chatsScreen(ctx context.Context) (string, models.ReplyMarkup, erro
 	var rows [][]models.InlineKeyboardButton
 	for _, c := range chats {
 		fmt.Fprintf(&sb, "\n<b>%s</b> — %s", html.EscapeString(c.Title), purposeLabels[c.Purpose])
-		rows = append(rows, []models.InlineKeyboardButton{{Text: "«" + c.Title + "»:", CallbackData: "noop"}})
-		rows = append(rows, purposeButtons(c.ID).InlineKeyboard...)
+		rows = append(rows, []models.InlineKeyboardButton{{
+			Text: "✏️ " + c.Title, CallbackData: fmt.Sprintf("%s%d:%s", cbChatPrefix, c.ID, cbChatOpen),
+		}})
 	}
-	sb.WriteString("\n\n📎 Материалы — «пришли материал» за сутки, один раз." +
-		"\n🔔 Выкладка — напоминания о публикации и контент-план по понедельникам." +
-		"\n💼 Продажи — напоминание заполнить отчёт (без чата — в личку).")
+	sb.WriteString("\n\n" + purposesHelp)
 	return sb.String(), &models.InlineKeyboardMarkup{InlineKeyboard: rows}, nil
+}
+
+// purposesHelp says what each purpose gets.
+const purposesHelp = "📎 Материалы — «пришли материал» за сутки, один раз." +
+	"\n🔔 Выкладка — напоминания о публикации и контент-план по понедельникам." +
+	"\n💼 Продажи — напоминание заполнить отчёт (без чата — в личку)." +
+	"\n✈️ Телеграм — посты в телеграме на день, за час до первого (без чата — в выкладку)."
+
+// chatScreen is one chat: its purpose and the buttons to change it.
+func (t *Bot) chatScreen(ctx context.Context, chatID int64) (string, models.ReplyMarkup, error) {
+	chats, err := t.store.ListChats(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	for _, c := range chats {
+		if c.ID != chatID {
+			continue
+		}
+		text := fmt.Sprintf("💬 <b>%s</b>\nСейчас: %s\n\nДля чего этот чат?\n\n%s",
+			html.EscapeString(c.Title), purposeLabels[c.Purpose], purposesHelp)
+		markup := purposeButtons(chatID)
+		markup.InlineKeyboard = append(markup.InlineKeyboard, []models.InlineKeyboardButton{{
+			Text: "← Все чаты", CallbackData: cbChatPrefix + "0:" + cbChatList,
+		}})
+		return text, markup, nil
+	}
+	return "", nil, storage.ErrNotFound
 }
 
 func purposeButtons(chatID int64) *models.InlineKeyboardMarkup {
 	data := func(p string) string { return fmt.Sprintf("%s%d:%s", cbChatPrefix, chatID, p) }
-	return &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{
-		{Text: purposeLabels[storage.PurposeMaterial], CallbackData: data(string(storage.PurposeMaterial))},
-		{Text: purposeLabels[storage.PurposePublish], CallbackData: data(string(storage.PurposePublish))},
-	}, {
-		{Text: purposeLabels[storage.PurposeSales], CallbackData: data(string(storage.PurposeSales))},
-		{Text: "Без назначения", CallbackData: data(cbChatNone)},
-	}}}
+	button := func(p storage.ChatPurpose) models.InlineKeyboardButton {
+		return models.InlineKeyboardButton{Text: purposeLabels[p], CallbackData: data(string(p))}
+	}
+	return &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{
+		{button(storage.PurposeMaterial), button(storage.PurposePublish)},
+		{button(storage.PurposeSales), button(storage.PurposeTelegram)},
+		{{Text: "Без назначения", CallbackData: data(cbChatNone)}},
+	}}
 }
 
 func (t *Bot) onChatCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -128,6 +162,16 @@ func (t *Bot) onChatCallback(ctx context.Context, b *bot.Bot, update *models.Upd
 
 	rawID, rawPurpose, _ := strings.Cut(strings.TrimPrefix(cq.Data, cbChatPrefix), ":")
 	chatID, err := strconv.ParseInt(rawID, 10, 64)
+	switch {
+	case err == nil && rawPurpose == cbChatList:
+		answer("")
+		t.redrawChats(ctx, cq.Message, func() (string, models.ReplyMarkup, error) { return t.chatsScreen(ctx) })
+		return
+	case err == nil && rawPurpose == cbChatOpen:
+		answer("")
+		t.redrawChats(ctx, cq.Message, func() (string, models.ReplyMarkup, error) { return t.chatScreen(ctx, chatID) })
+		return
+	}
 	purpose := storage.ChatPurpose(rawPurpose)
 	if rawPurpose == cbChatNone {
 		purpose = storage.PurposeNone
@@ -161,18 +205,25 @@ func (t *Bot) onChatCallback(ctx context.Context, b *bot.Bot, update *models.Upd
 		t.greetChat(ctx, chatID, purpose)
 	}
 
-	// Redraw as the chats screen: it shows the result for every chat.
-	if m := cq.Message.Message; m != nil {
-		text, markup, err := t.chatsScreen(ctx)
-		if err != nil {
-			t.log.Error("chats screen", "err", err)
-			return
-		}
-		if _, err := t.api.EditMessageText(ctx, &bot.EditMessageTextParams{
-			ChatID: m.Chat.ID, MessageID: m.ID, Text: text, ParseMode: models.ParseModeHTML, ReplyMarkup: markup,
-		}); err != nil {
-			t.log.Error("edit chats screen", "err", err)
-		}
+	// Redraw as the chats list: it shows the result for every chat.
+	t.redrawChats(ctx, cq.Message, func() (string, models.ReplyMarkup, error) { return t.chatsScreen(ctx) })
+}
+
+// redrawChats replaces the message the button was pressed on with screen.
+func (t *Bot) redrawChats(ctx context.Context, msg models.MaybeInaccessibleMessage, screen func() (string, models.ReplyMarkup, error)) {
+	m := msg.Message
+	if m == nil {
+		return // too old to edit
+	}
+	text, markup, err := screen()
+	if err != nil {
+		t.log.Error("chats screen", "err", err)
+		return
+	}
+	if _, err := t.api.EditMessageText(ctx, &bot.EditMessageTextParams{
+		ChatID: m.Chat.ID, MessageID: m.ID, Text: text, ParseMode: models.ParseModeHTML, ReplyMarkup: markup,
+	}); err != nil {
+		t.log.Error("edit chats screen", "err", err)
 	}
 }
 

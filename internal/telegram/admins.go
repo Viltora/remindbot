@@ -306,8 +306,8 @@ func (t *Bot) onStatus(ctx context.Context, _ *bot.Bot, update *models.Update) {
 	}
 	group := "❌ бот пока не добавлен ни в один чат"
 	if st.ActiveChats > 0 {
-		group = fmt.Sprintf("всего %d\n   📎 материалы: %s · 🔔 выкладка: %s · 💼 продажи: %s",
-			st.ActiveChats, have(st.MaterialChats), have(st.PublishChats), have(st.SalesChats))
+		group = fmt.Sprintf("всего %d\n   📎 материалы: %s · 🔔 выкладка: %s · 💼 продажи: %s · ✈️ телеграм: %s",
+			st.ActiveChats, have(st.MaterialChats), have(st.PublishChats), have(st.SalesChats), have(st.TelegramChats))
 		if st.Unassigned > 0 {
 			group += fmt.Sprintf("\n   без назначения: %d — см. /chats", st.Unassigned)
 		}

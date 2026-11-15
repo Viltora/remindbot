@@ -221,7 +221,7 @@ func (t *Bot) sendTelegramDay(ctx context.Context, due []storage.Task) error {
 	if err != nil {
 		return err
 	}
-	chats, err := t.contentChats(ctx, storage.PurposePublish)
+	chats, err := t.telegramChats(ctx)
 	if err != nil {
 		return err
 	}
@@ -252,6 +252,19 @@ func (t *Bot) sendTelegramDay(ctx context.Context, due []storage.Task) error {
 	}
 	t.log.Warn("telegram day not delivered, will retry", "posts", len(claimed))
 	return errors.Join(errs...)
+}
+
+// telegramChats returns where the day's message about the Telegram posts
+// goes: the telegram chats, or with none the publish chats (in test mode, the
+// test recipients).
+func (t *Bot) telegramChats(ctx context.Context) ([]int64, error) {
+	if !t.testMode() {
+		chats, err := t.store.ChatsFor(ctx, storage.PurposeTelegram)
+		if err != nil || len(chats) > 0 {
+			return chats, err
+		}
+	}
+	return t.contentChats(ctx, storage.PurposePublish)
 }
 
 // telegramDayText is the day's message about the Telegram posts, given in

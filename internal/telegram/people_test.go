@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"strings"
 	"testing"
 
 	"remindbot/internal/storage"
@@ -55,7 +56,7 @@ func TestGreetingForEveryPurpose(t *testing.T) {
 
 func TestPersonNameHidesOnlyEmails(t *testing.T) {
 	for in, want := range map[string]string{
-		"Катя":                "Катя",
+		"Катя":                  "Катя",
 		" Аня @smm ":            "Аня @smm",
 		"Ivan @ Design":         "Ivan @ Design",
 		"someone@example.com":   "",
@@ -65,5 +66,21 @@ func TestPersonNameHidesOnlyEmails(t *testing.T) {
 		if got := personName(in); got != want {
 			t.Errorf("personName(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestPurposeButtons(t *testing.T) {
+	var got []string
+	for _, row := range purposeButtons(-1001234567890).InlineKeyboard {
+		for _, b := range row {
+			if len(b.CallbackData) > 64 {
+				t.Errorf("callback data %q is %d bytes, Telegram allows 64", b.CallbackData, len(b.CallbackData))
+			}
+			got = append(got, b.CallbackData)
+		}
+	}
+	want := "chat:-1001234567890:material chat:-1001234567890:publish chat:-1001234567890:sales chat:-1001234567890:telegram chat:-1001234567890:none"
+	if strings.Join(got, " ") != want {
+		t.Errorf("purpose buttons: %v", got)
 	}
 }

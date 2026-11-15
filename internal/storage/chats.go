@@ -59,6 +59,9 @@ const (
 	PurposeSales    ChatPurpose = "sales"
 	PurposeMaterial ChatPurpose = "material" // requests for material for approval
 	PurposePublish  ChatPurpose = "publish"  // publishing reminders, content plan
+	// PurposeTelegram gets the day's message about the Telegram posts; with
+	// no such chat it goes to the publish chats.
+	PurposeTelegram ChatPurpose = "telegram"
 )
 
 type Chat struct {
@@ -121,6 +124,7 @@ type Stats struct {
 	MaterialChats int
 	PublishChats  int
 	SalesChats    int
+	TelegramChats int
 	Unassigned    int
 }
 
@@ -140,9 +144,10 @@ func (s *Store) Stats(ctx context.Context, superadminID int64) (Stats, error) {
 		    (SELECT count(*) FROM chats WHERE active AND purpose IN ('material', 'content')),
 		    (SELECT count(*) FROM chats WHERE active AND purpose IN ('publish', 'content')),
 		    (SELECT count(*) FROM chats WHERE active AND purpose = 'sales'),
+		    (SELECT count(*) FROM chats WHERE active AND purpose = 'telegram'),
 		    (SELECT count(*) FROM chats WHERE active AND purpose IS NULL)`,
 		superadminID).
 		Scan(&st.Users, &st.Admins, &st.Sales, &st.Telegram, &st.Regular, &st.InGroups,
-			&st.ActiveChats, &st.MaterialChats, &st.PublishChats, &st.SalesChats, &st.Unassigned)
+			&st.ActiveChats, &st.MaterialChats, &st.PublishChats, &st.SalesChats, &st.TelegramChats, &st.Unassigned)
 	return st, err
 }

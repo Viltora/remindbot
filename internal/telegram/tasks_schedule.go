@@ -30,7 +30,7 @@ import (
 // announced; it tags the people with the "telegram" role. A post added or
 // moved later in the day gets a message of its own the same way.
 const (
-	materialLead      = 24 * time.Hour
+	materialLead = 24 * time.Hour
 	// Since 16.11.2026 the material is asked for once, without reminders
 	// (it was one, an hour after the request).
 	materialReminders = 0
